@@ -1,0 +1,58 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 222 38% 5%;
+    --foreground: 0 0% 100%;
+    --card: 221 30% 11%;
+    --card-foreground: 0 0% 100%;
+    --popover: 221 30% 11%;
+    --popover-foreground: 0 0% 100%;
+    --primary: 218 100% 52%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 219 100% 61%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 221 24% 15%;
+    --muted-foreground: 218 12% 69%;
+    --accent: 221 24% 17%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 72% 55%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 220 20% 19%;
+    --input: 220 20% 22%;
+    --ring: 218 100% 52%;
+    --radius: 0.75rem;
+  }
+}
+
+@layer base {
+  * { @apply border-border; }
+  html { scroll-behavior: smooth; }
+  body {
+    @apply bg-background text-foreground font-body antialiased;
+    overflow-x: hidden;
+  }
+  ::selection { background: #0866ff; color: #fff; }
+  input[type="date"]::-webkit-calendar-picker-indicator,
+  input[type="time"]::-webkit-calendar-picker-indicator { filter: invert(1); opacity: .7; cursor: pointer; }
+}
+
+@layer components {
+  .headline { @apply font-display font-extrabold uppercase leading-[0.9] tracking-tight; }
+  .pixel-badge {
+    @apply inline-flex items-center gap-2 font-pixel text-[11px] uppercase tracking-wider text-white bg-[#0866FF] px-3 py-1.5;
+    box-shadow: 3px 3px 0 #377dff55;
+    clip-path: polygon(0 4px, 4px 4px, 4px 0, calc(100% - 4px) 0, calc(100% - 4px) 4px, 100% 4px, 100% calc(100% - 4px), calc(100% - 4px) calc(100% - 4px), calc(100% - 4px) 100%, 4px 100%, 4px calc(100% - 4px), 0 calc(100% - 4px));
+  }
+  .surface { @apply bg-card border border-border rounded-xl; }
+  .field { @apply w-full h-11 rounded-lg bg-[#0d121c] border border-input px-3 text-sm text-white placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary; }
+  .lift { transition: transform .2s ease, border-color .2s ease, background-color .2s ease; }
+  .lift:hover { transform: translateY(-3px); border-color: #377dff66; }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { scrollbar-width: none; }
+}
+
+.fade-up { animation: fadeUp .5s ease both; }
+@keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
