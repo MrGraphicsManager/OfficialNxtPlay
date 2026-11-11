@@ -8,7 +8,7 @@ export default function DashLayout({ items, children, headerCenter, headerRight,
   const nav = useNavigate();
   return (
     <div className="min-h-screen">
-      <header className="sticky top-0 z-40 bg-[#080B12]/95 backdrop-blur border-b border-border">
+      <header className="sticky top-0 z-40 bg-[#080808]/95 backdrop-blur border-b border-border">
         <div className="px-4 sm:px-6 h-16 flex items-center gap-3 justify-between">
           <div className="flex items-center gap-3 min-w-0">
             <Logo className="h-6" />

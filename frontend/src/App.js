@@ -4,6 +4,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider, RequireRole } from "@/lib/auth";
 import PublicLayout from "@/components/PublicLayout";
 import Home from "@/pages/Home";
+import Landing from "@/pages/Landing";
 import Venues from "@/pages/Venues";
 import VenueDetail from "@/pages/VenueDetail";
 import { Login, Signup, ForgotPassword, ResetPassword } from "@/pages/Auth";
@@ -30,7 +31,8 @@ export default function App() {
       <BrowserRouter>
         <Routes>
           <Route element={<PublicLayout />}>
-            <Route path="/" element={<Home />} />
+            <Route path="/" element={<Landing />} />
+            <Route path="/book" element={<Home />} />
             <Route path="/venues" element={<Venues />} />
             <Route path="/venues/:id" element={<VenueDetail />} />
             <Route path="/login" element={<Login />} />

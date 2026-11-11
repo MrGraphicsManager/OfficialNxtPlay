@@ -88,7 +88,7 @@ export default function VenueDetail() {
     <div className="pb-32">
       <section className="relative h-64 sm:h-80">
         <img src={cover} alt={venue.name} className="absolute inset-0 w-full h-full object-cover" />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#080B12] via-[#080B12]/60 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-[#080808] via-[#080808]/60 to-transparent" />
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 h-full flex flex-col justify-end pb-6">
           {venue.is_demo && <span className="pixel-badge !bg-amber-500 !text-black w-fit mb-3" data-testid="venue-demo-badge">Demo venue · not a real listing</span>}
           <h1 className="headline text-5xl sm:text-6xl" data-testid="venue-name">{venue.name}</h1>
@@ -163,7 +163,7 @@ export default function VenueDetail() {
       </div>
 
       {selected.length > 0 && (
-        <div className="fixed bottom-0 inset-x-0 z-30 bg-[#131823] border-t border-border" data-testid="selection-bar">
+        <div className="fixed bottom-0 inset-x-0 z-30 bg-[#151515] border-t border-border" data-testid="selection-bar">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
             <div className="min-w-0">
               <p className="font-semibold text-sm sm:text-base" data-testid="selection-summary">{time12(selected[0].start)} – {time12(selected[selected.length - 1].end)} · {duration(selected[selected.length - 1].end - selected[0].start)}</p>

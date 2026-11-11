@@ -4,26 +4,26 @@
 
 @layer base {
   :root {
-    --background: 222 38% 5%;
+    --background: 0 0% 3%;
     --foreground: 0 0% 100%;
-    --card: 221 30% 11%;
+    --card: 0 0% 8%;
     --card-foreground: 0 0% 100%;
-    --popover: 221 30% 11%;
+    --popover: 0 0% 8%;
     --popover-foreground: 0 0% 100%;
-    --primary: 218 100% 52%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 219 100% 61%;
+    --primary: 76 100% 50%;
+    --primary-foreground: 0 0% 3%;
+    --secondary: 281 100% 50%;
     --secondary-foreground: 0 0% 100%;
-    --muted: 221 24% 15%;
-    --muted-foreground: 218 12% 69%;
-    --accent: 221 24% 17%;
+    --muted: 0 0% 12%;
+    --muted-foreground: 240 5% 65%;
+    --accent: 0 0% 13%;
     --accent-foreground: 0 0% 100%;
     --destructive: 0 72% 55%;
     --destructive-foreground: 0 0% 100%;
-    --border: 220 20% 19%;
-    --input: 220 20% 22%;
-    --ring: 218 100% 52%;
-    --radius: 0.75rem;
+    --border: 0 0% 16%;
+    --input: 0 0% 20%;
+    --ring: 76 100% 50%;
+    --radius: 0.375rem;
   }
 }
 
@@ -34,7 +34,7 @@
     @apply bg-background text-foreground font-body antialiased;
     overflow-x: hidden;
   }
-  ::selection { background: #0866ff; color: #fff; }
+  ::selection { background: #C8FF00; color: #080808; }
   input[type="date"]::-webkit-calendar-picker-indicator,
   input[type="time"]::-webkit-calendar-picker-indicator { filter: invert(1); opacity: .7; cursor: pointer; }
 }
@@ -42,17 +42,26 @@
 @layer components {
   .headline { @apply font-display font-extrabold uppercase leading-[0.9] tracking-tight; }
   .pixel-badge {
-    @apply inline-flex items-center gap-2 font-pixel text-[11px] uppercase tracking-wider text-white bg-[#0866FF] px-3 py-1.5;
-    box-shadow: 3px 3px 0 #377dff55;
+    @apply inline-flex items-center gap-2 font-pixel text-[11px] uppercase tracking-wider text-[#080808] bg-[#C8FF00] px-3 py-1.5;
+    box-shadow: 4px 4px 0 #B000FF;
     clip-path: polygon(0 4px, 4px 4px, 4px 0, calc(100% - 4px) 0, calc(100% - 4px) 4px, 100% 4px, 100% calc(100% - 4px), calc(100% - 4px) calc(100% - 4px), calc(100% - 4px) 100%, 4px 100%, 4px calc(100% - 4px), 0 calc(100% - 4px));
   }
-  .surface { @apply bg-card border border-border rounded-xl; }
-  .field { @apply w-full h-11 rounded-lg bg-[#0d121c] border border-input px-3 text-sm text-white placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary; }
+  .surface { @apply bg-card border border-border rounded-md; }
+  .field { @apply w-full h-11 rounded-md bg-[#0f0f0f] border border-input px-3 text-sm text-white placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary; }
   .lift { transition: transform .2s ease, border-color .2s ease, background-color .2s ease; }
-  .lift:hover { transform: translateY(-3px); border-color: #377dff66; }
+  .lift:hover { transform: translateY(-3px); border-color: #C8FF0080; }
+  .cut { clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 18px 100%, 0 calc(100% - 18px)); }
+  .cut-sm { clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px)); }
+  .text-stroke { -webkit-text-stroke: 2px #fff; color: transparent; }
   .no-scrollbar::-webkit-scrollbar { display: none; }
   .no-scrollbar { scrollbar-width: none; }
 }
 
+.bg-primary { color: hsl(var(--primary-foreground)); }
+.reveal { opacity: 0; transform: translateY(28px); transition: opacity .7s ease, transform .7s ease; }
+.reveal.in { opacity: 1; transform: none; }
+.marquee { animation: marquee 28s linear infinite; }
+@keyframes marquee { to { transform: translateX(-50%); } }
+@media (prefers-reduced-motion: reduce) { .marquee { animation: none; } .reveal { opacity: 1; transform: none; } }
 .fade-up { animation: fadeUp .5s ease both; }
 @keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }

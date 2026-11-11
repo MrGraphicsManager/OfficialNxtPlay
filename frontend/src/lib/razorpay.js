@@ -29,7 +29,7 @@ export async function payWithRazorpay({ order, booking, prefill = {}, descriptio
       name: "NXTPLAY",
       description: description || `${booking.venue_name} · ${booking.court_name}`,
       prefill,
-      theme: { color: "#0866FF" },
+      theme: { color: "#C8FF00" },
       handler: async (res) => {
         try {
           const { data } = await api.post("/payments/verify", res);

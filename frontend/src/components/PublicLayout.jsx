@@ -6,7 +6,7 @@ import { Logo } from "@/components/Bits";
 import { useAuth, homeFor } from "@/lib/auth";
 
 const NAV = [
-  { to: "/venues", label: "Explore Venues", id: "explore" },
+  { to: "/book", label: "Explore Venues", id: "explore" },
   { to: "/#how-it-works", label: "How It Works", id: "how" },
   { to: "/contact?topic=owner", label: "For Venue Owners", id: "owners" },
 ];
@@ -34,7 +34,7 @@ function AuthButtons({ onClick }) {
 export function Navbar() {
   const [open, setOpen] = useState(false);
   return (
-    <header className="sticky top-0 z-40 bg-[#080B12]/90 backdrop-blur border-b border-border">
+    <header className="sticky top-0 z-40 bg-[#080808]/90 backdrop-blur border-b border-border">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
         <Logo />
         <nav className="hidden md:flex items-center gap-8 text-sm font-semibold text-muted-foreground">
@@ -48,7 +48,7 @@ export function Navbar() {
         </button>
       </div>
       {open && (
-        <div className="md:hidden border-t border-border px-4 py-4 space-y-1 bg-[#080B12]" data-testid="nav-mobile-menu">
+        <div className="md:hidden border-t border-border px-4 py-4 space-y-1 bg-[#080808]" data-testid="nav-mobile-menu">
           {NAV.map((n) => (
             <Link key={n.id} to={n.to} onClick={() => setOpen(false)} className="block py-2.5 font-semibold">{n.label}</Link>
           ))}

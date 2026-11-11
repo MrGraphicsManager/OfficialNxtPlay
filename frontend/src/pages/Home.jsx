@@ -42,17 +42,17 @@ export default function Home() {
   const { data: venues = [], isLoading } = useQuery({ queryKey: ["venues", "featured"], queryFn: async () => (await api.get("/venues")).data });
   return (
     <div>
-      <section className="relative min-h-[88vh] flex items-center overflow-hidden" data-testid="hero-section">
+      <section className="relative min-h-[70vh] flex items-center overflow-hidden" data-testid="hero-section">
         <img src="/img/hero.jpg" alt="" className="absolute inset-0 w-full h-full object-cover" />
-        <div className="absolute inset-0 bg-gradient-to-r from-[#080B12] via-[#080B12]/85 to-[#080B12]/40" />
-        <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-[#080B12] to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-r from-[#080808] via-[#080808]/85 to-[#080808]/40" />
+        <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-[#080808] to-transparent" />
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 py-20 w-full">
           <div className="max-w-2xl fade-up">
-            <PixelBadge>Launching in Navsari</PixelBadge>
-            <h1 className="headline text-6xl sm:text-7xl lg:text-8xl mt-6" data-testid="hero-headline">Your game.<br /><span className="text-[#377DFF]">Your slot.</span></h1>
+            <PixelBadge>Book in Navsari</PixelBadge>
+            <h1 className="headline text-6xl sm:text-7xl lg:text-8xl mt-6" data-testid="hero-headline">Your game.<br /><span className="text-primary">Your slot.</span></h1>
             <p className="text-base sm:text-lg text-muted-foreground mt-6 max-w-lg">Find, book and play at the best sports venues in your city — starting with Navsari.</p>
             <div className="flex flex-wrap gap-3 mt-8">
-              <Button size="lg" asChild className="font-bold" data-testid="hero-book-btn"><Link to="/venues">Book Your Game</Link></Button>
+              <Button size="lg" asChild className="font-bold uppercase" data-testid="hero-book-btn"><Link to="/venues">Browse All Venues</Link></Button>
               <Button size="lg" variant="outline" asChild className="font-bold bg-transparent" data-testid="hero-how-btn"><a href="#how-it-works">How It Works</a></Button>
             </div>
           </div>
@@ -68,7 +68,7 @@ export default function Home() {
             <Link key={s.id} to={`/venues?sport=${s.id}`} data-testid={`sport-card-${s.name.toLowerCase().replace(/ /g, "-")}`}
               className="relative surface overflow-hidden h-56 lift group">
               <img src={SPORT_IMG[s.name] || "/img/hero.jpg"} alt={s.name} className="absolute inset-0 w-full h-full object-cover opacity-60 group-hover:opacity-80 transition-opacity" />
-              <div className="absolute inset-0 bg-gradient-to-t from-[#080B12] to-transparent" />
+              <div className="absolute inset-0 bg-gradient-to-t from-[#080808] to-transparent" />
               <p className="absolute bottom-5 left-5 headline text-4xl">{s.name}</p>
             </Link>
           ))}
@@ -105,10 +105,10 @@ export default function Home() {
       </section>
 
       <section className="max-w-7xl mx-auto px-4 sm:px-6 mt-24">
-        <div className="rounded-xl bg-primary p-10 sm:p-16 relative overflow-hidden" data-testid="cta-section">
+        <div className="cut bg-primary text-[#080808] p-10 sm:p-16 relative overflow-hidden" data-testid="cta-section">
           <h2 className="headline text-5xl sm:text-7xl">Less scrolling.<br />More playing.</h2>
-          <Button size="lg" asChild className="mt-8 bg-white text-[#080B12] hover:bg-white/90 font-bold" data-testid="cta-book-btn"><Link to="/venues">Book Your Slot Now</Link></Button>
-          <span className="absolute right-6 bottom-6 font-pixel text-white/30 text-xs hidden sm:block">NXTPLAY // NAVSARI</span>
+          <Button size="lg" asChild className="mt-8 bg-[#080808] text-primary hover:bg-[#B000FF] hover:text-white font-bold" data-testid="cta-book-btn"><Link to="/venues">Book Your Slot Now</Link></Button>
+          <span className="absolute right-6 bottom-6 font-pixel text-black/40 text-xs hidden sm:block">NXTPLAY // NAVSARI</span>
         </div>
       </section>
     </div>
