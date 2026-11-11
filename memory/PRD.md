@@ -12,6 +12,7 @@ Update (2): rebrand to official logo colors — bg #080808, lime #C8FF00, purple
 ## Implemented
 - 2026-11-11: Full MVP (all customer/owner/admin pages & APIs), demo venue labelled DEMO, admin bootstrap from env
 - 2026-11-11: Rebrand to lime/purple/black tokens across all pages; new Landing page (/), booking hub moved to /book
+- 2026-11-11: Walk-in bookings (cash & online) show booking code + QR to owner after booking and in booking details; Download QR + WhatsApp share (WalkinTicket component)
 
 ## Status / limitations
 - Razorpay keys NOT set → online checkout disabled (cash walk-ins work). User has live keys only.

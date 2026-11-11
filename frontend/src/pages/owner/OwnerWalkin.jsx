@@ -2,6 +2,8 @@ import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import WalkinTicket from "@/components/WalkinTicket";
 import { Field, NativeSelect, PageTitle } from "@/components/Bits";
 import { useOwner } from "@/pages/owner/OwnerLayout";
 import { api, errMsg } from "@/lib/api";
@@ -21,6 +23,7 @@ export default function OwnerWalkin() {
   const [end, setEnd] = useState("");
   const [f, setF] = useState(EMPTY);
   const [busy, setBusy] = useState(false);
+  const [ticket, setTicket] = useState(null);
 
   const { data: slotData = [], refetch } = useQuery({
     queryKey: ["owner-slots", venue.id, date],
@@ -51,6 +54,7 @@ export default function OwnerWalkin() {
         await payWithRazorpay({ order: data.order, booking: data.booking, prefill: { name: f.customer_name, contact: f.customer_mobile }, description: "Walk-in booking" });
       }
       toast.success(`Walk-in booked: ${data.booking.code}`);
+      setTicket(data.booking.id);
       reset();
     } catch (err) {
       toast.error(err.message && !err.response ? err.message : errMsg(err));
@@ -96,6 +100,12 @@ export default function OwnerWalkin() {
         </div>
         <Button className="h-11 font-bold" disabled={busy} data-testid="walkin-submit-btn">{busy ? "Saving…" : f.payment_method === "cash" ? "Record cash booking" : "Collect online payment"}</Button>
       </form>
+      <Dialog open={!!ticket} onOpenChange={(o) => !o && setTicket(null)}>
+        <DialogContent className="bg-card max-w-sm" data-testid="walkin-ticket-dialog">
+          <DialogHeader><DialogTitle className="headline text-3xl">Booking confirmed</DialogTitle></DialogHeader>
+          {ticket && <WalkinTicket bookingId={ticket} />}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

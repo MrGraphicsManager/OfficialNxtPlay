@@ -166,7 +166,8 @@ async def my_bookings(user=Depends(require_roles("customer"))):
 @router.get("/bookings/{booking_id}")
 async def booking_detail(booking_id: str, user=Depends(get_current_user)):
     b = await load_booking_for(booking_id, user)
-    if user["role"] != "customer":
+    owner_walkin = user["role"] == "owner" and b.get("source") == "walkin"
+    if user["role"] != "customer" and not owner_walkin:
         b.pop("qr_token", None)
     if user["role"] == "owner":
         b.pop("user_id", None)

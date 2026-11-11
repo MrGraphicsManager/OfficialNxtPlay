@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Stat, PageTitle, StatusBadge, Table, Td, NativeSelect } from "@/components/Bits";
 import { useOwner } from "@/pages/owner/OwnerLayout";
+import WalkinTicket from "@/components/WalkinTicket";
 import { api } from "@/lib/api";
 import { inr, todayIST, hmTo12, fmtDate, fmtDateTime } from "@/lib/format";
 
@@ -28,6 +29,7 @@ function BookingDialog({ b, onClose }) {
           {rows.map(([l, v]) => <div key={l} className="flex justify-between py-2 border-b border-border last:border-0"><span className="text-muted-foreground">{l}</span><span className="font-semibold">{v}</span></div>)}
           <div className="pt-3"><StatusBadge status={b.status} /></div>
         </div>
+        {b.source === "walkin" && <div className="border-t border-border pt-4"><WalkinTicket bookingId={b.id} /></div>}
       </DialogContent>
     </Dialog>
   );
