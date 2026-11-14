@@ -36,7 +36,7 @@ export default function CheckoutDialog({ open, onClose, selection, paymentsEnabl
       setAgree(false);
       fetchQuote(null);
     }
-  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open]);
 
   const pay = async () => {
     setBusy(true);

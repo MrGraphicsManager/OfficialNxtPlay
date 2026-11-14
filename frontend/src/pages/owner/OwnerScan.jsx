@@ -70,7 +70,7 @@ export default function OwnerScan() {
       setCamErr("Camera unavailable or permission denied. Use the booking code below.");
     }
   };
-  useEffect(() => () => { stop(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => { stop(); }, []);
 
   return (
     <div className="max-w-xl">

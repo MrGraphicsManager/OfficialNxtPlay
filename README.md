@@ -1,6 +1,6 @@
 # NXTPLAY — Independent Cloud Deployment
 
-This branch removes Emergent development overlays and analytics while preserving the sports booking application.
+This application runs independently while preserving the sports booking experience.
 
 ## Backend — Render
 - Root directory: `backend`
@@ -23,5 +23,6 @@ This branch removes Emergent development overlays and analytics while preserving
 ## Security and verification
 - Rotate any MongoDB password previously shared in chat or elsewhere.
 - Do not commit `.env` files or credentials.
+- The backend regression suite is intentionally disabled unless every `NXTPLAY_E2E_*` variable is set. It creates and changes records, so point it only at a dedicated non-production environment.
 - Test customer, owner, admin, bookings, QR check-in, cancellation, and Razorpay webhook flows before production.
 - This branch is not a confirmed successful deployment or end-to-end test.
