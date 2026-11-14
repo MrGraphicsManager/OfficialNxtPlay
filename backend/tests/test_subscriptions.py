@@ -49,13 +49,56 @@ class FakeSubAPI:
 
 
 class FakePaymentAPI:
+    refunds = []
+
     def refund(self, pid, opts):
+        self.refunds.append(opts)
         return {"id": "rfnd_mock", "status": "processed"}
+
+    def transfers(self, pid):
+        return {"items": [{"id": "trf_1", "source": pid, "recipient": "acc_venueA123", "amount": ROUTE["amount"], "status": "processed"}]}
+
+
+ROUTE = {"amount": 0, "orders": []}
+
+
+class FakeOrderAPI:
+    def create(self, payload):
+        ROUTE["orders"].append(payload)
+        return {"id": f"order_route_{core.new_id()[:8]}"}
+
+
+class FakeAccountAPI:
+    def create(self, payload):
+        return {"id": "acc_venueA123"}
+
+    def fetch(self, acc):
+        return {"id": acc, "status": "activated"}
+
+
+class FakeStakeholderAPI:
+    def create(self, acc, payload):
+        return {"id": "sth_1"}
+
+
+class FakeProductAPI:
+    def requestProductConfiguration(self, acc, payload):
+        return {"id": "acc_prd_1", "activation_status": "requested"}
+
+    def edit(self, acc, pid, payload):
+        return {"id": pid, "activation_status": "activated", "requirements": []}
+
+    def fetch(self, acc, pid):
+        return {"id": pid, "activation_status": "activated"}
 
 
 class FakeClient:
     subscription = FakeSubAPI()
     payment = FakePaymentAPI()
+    order = FakeOrderAPI()
+    account = FakeAccountAPI()
+    stakeholder = FakeStakeholderAPI()
+    product = FakeProductAPI()
 
 
 FAKE = FakeClient()
@@ -69,6 +112,10 @@ async def fake_send_email(*, to, subject, html):
 
 core.rzp = lambda: FAKE
 subscriptions.rzp = lambda: FAKE
+import route_payouts  # noqa: E402
+import booking_routes  # noqa: E402
+route_payouts.rzp = lambda: FAKE
+booking_routes.rzp = lambda: FAKE
 emailer.send_email = fake_send_email
 
 
@@ -344,6 +391,61 @@ def test_17_existing_password_login_and_refund_regression():
     refund = run(core.initiate_refund(b, "test"))
     again = run(core.initiate_refund(b, "test"))
     assert refund["status"] == "processed" and again["id"] == refund["id"], "refunds are idempotent"
+
+
+def route_hook(event, transfer, event_id):
+    raw = json.dumps({"event": event, "payload": {"transfer": {"entity": transfer}}}).encode()
+    sig = hmac.new(b"mock_webhook", raw, hashlib.sha256).hexdigest()
+    return req("POST", "/route/webhook", content=raw, headers={"x-razorpay-signature": sig, "x-razorpay-event-id": event_id,
+                                                               "content-type": "application/json"})
+
+
+def test_18_route_kyc_and_booking_routing():
+    os.environ["ROUTE_ENABLED"] = "true"
+    run(core.db.users.update_one({"id": S["owner_a"]}, {"$set": {"password_hash": core.hash_pw("RouteOwner#1"), "must_change_password": False}}))
+    to = login("owner.a@nxtplaytest.com", "RouteOwner#1")
+    date = (datetime.now(core.IST) + timedelta(days=5)).strftime("%Y-%m-%d")
+    slots = req("GET", f"/venues/{S['venue_a']}/slots?date={date}").json()
+    court = next(c for c in slots if any(s["status"] == "available" for s in c["slots"]))
+    s = next(x for x in court["slots"] if x["status"] == "available")
+    body = {"court_id": court["court_id"], "date": date, "start_min": s["start"], "end_min": s["end"]}
+    assert req("POST", "/bookings", S["cust"], json=body).status_code == 503, "no linked account -> no online booking"
+    kyc = {"legal_business_name": "TEST Arena Pvt", "business_type": "proprietorship", "contact_name": "Owner A", "email": "owner.a@nxtplaytest.com",
+           "phone": "9999900001", "street1": "Test road", "city": "Navsari", "state": "Gujarat", "postal_code": "396445",
+           "stakeholder_name": "Owner A", "stakeholder_pan": "ABCPE1234F", "account_number": "123456789012", "ifsc_code": "HDFC0001234",
+           "beneficiary_name": "Owner A", "tnc_accepted": True}
+    other = req("POST", f"/route/owner/venues/{S['venue_a']}/kyc", S.get("owner_b_tok") or S["cust"], json=kyc)
+    assert other.status_code in (403, 404), "others cannot submit KYC for this venue"
+    r = req("POST", f"/route/owner/venues/{S['venue_a']}/kyc", to, json=kyc)
+    assert r.status_code == 200 and r.json()["status"] == "activated", r.text
+    la = run(core.db.linked_accounts.find_one({"venue_id": S["venue_a"]}, {"_id": 0}))
+    assert "123456789012" not in json.dumps(la, default=str) and "ABCPE1234F" not in json.dumps(la, default=str), "raw KYC never stored"
+    r = req("POST", "/bookings", S["cust"], json=body)
+    assert r.status_code == 200, r.text
+    order = ROUTE["orders"][-1]
+    assert order["transfers"][0]["account"] == "acc_venueA123" and order["transfers"][0]["amount"] == order["amount"], "100% to venue"
+    S["route_booking"], ROUTE["amount"] = r.json()["booking"]["id"], order["amount"]
+
+
+def test_19_route_transfer_tracking_and_refund_reversal():
+    bid = S["route_booking"]
+    run(core.db.payments.update_one({"booking_id": bid}, {"$set": {"status": "captured", "razorpay_payment_id": "pay_route_1"}}))
+    run(core.db.bookings.update_one({"id": bid}, {"$set": {"status": "confirmed", "settlement_status": "unsettled"}}))
+    pay = run(core.db.payments.find_one({"booking_id": bid}, {"_id": 0}))
+    run(route_payouts.after_capture(pay["razorpay_order_id"]))
+    assert run(core.db.bookings.find_one({"id": bid}))["settlement_status"] == "transferred", "processed is not settled"
+    bad = route_hook("transfer.processed", {"id": "trf_x", "source": "pay_route_1", "recipient": "acc_wrong999", "amount": ROUTE["amount"], "status": "processed"}, "r_evt_1")
+    assert bad.status_code == 200
+    assert run(core.db.bookings.find_one({"id": bid}))["settlement_status"] == "transfer_mismatch"
+    ok = {"id": "trf_1", "source": "pay_route_1", "recipient": "acc_venueA123", "amount": ROUTE["amount"], "status": "processed", "recipient_settlement_id": "setl_1"}
+    assert route_hook("transfer.processed", ok, "r_evt_2").status_code == 200
+    assert route_hook("transfer.processed", ok, "r_evt_2").json()["status"] == "duplicate"
+    assert run(core.db.bookings.find_one({"id": bid}))["settlement_status"] == "settled", "settled only with Razorpay settlement id"
+    ref = {"id": "ref_route_1", "booking_id": bid, "booking_code": pay["booking_code"], "razorpay_payment_id": "pay_route_1", "amount": ROUTE["amount"] // 100}
+    run(core.db.refunds.insert_one(dict(ref)))
+    run(core.call_refund_api(ref))
+    assert FakePaymentAPI.refunds[-1].get("reverse_all") == 1, "refund reverses the venue transfer"
+    os.environ["ROUTE_ENABLED"] = "false"
 
 
 def test_99_teardown():

@@ -11,6 +11,8 @@ from core import (db, NO_ID, iso, now_utc, now_ist, new_id, gen_code, require_ro
                   confirm_paid_order, initiate_refund, owner_venue_ids, HOLD_MINUTES, CANCEL_CUTOFF_HOURS, REFUND_STATUS,
                   slot_dt, log)
 
+from route_payouts import route_enabled, activated_account_for_venue, order_transfers, after_capture  # noqa: E402
+
 router = APIRouter(prefix="/api")
 
 
@@ -47,16 +49,23 @@ async def create_pending_with_order(base: dict, notes: dict):
     client_ = rzp()
     if not client_:
         raise HTTPException(503, "Online payments are not configured yet")
-    booking = {**base, "id": new_id(), "code": gen_code(), "status": "pending_payment",
+    routed = None
+    if route_enabled():
+        routed = await activated_account_for_venue(base["venue_id"])
+        if not routed:
+            raise HTTPException(503, "Online payments for this venue are being set up. Please contact the venue.")
+    booking = {**base, "route": bool(routed), "id": new_id(), "code": gen_code(), "status": "pending_payment",
                "hold_expires_at": iso(now_utc() + timedelta(minutes=HOLD_MINUTES)), "created_at": iso(), "updated_at": iso()}
     await db.bookings.insert_one(booking)
     if not await reserve_slots(booking["id"], booking["court_id"], booking["date"], booking["slot_starts"]):
         await db.bookings.update_one({"id": booking["id"]}, {"$set": {"status": "expired", "cancel_reason": "Slot conflict"}})
         raise HTTPException(409, "One or more selected slots were just booked. Please choose another time.")
     amount_paise = int(booking["final_amount"]) * 100
+    payload = {"amount": amount_paise, "currency": "INR", "receipt": booking["code"], "payment_capture": 1, "notes": notes}
+    if routed:
+        payload["transfers"] = order_transfers(routed[0], amount_paise, booking)
     try:
-        order = await run_in_threadpool(client_.order.create, {"amount": amount_paise, "currency": "INR",
-                                                               "receipt": booking["code"], "payment_capture": 1, "notes": notes})
+        order = await run_in_threadpool(client_.order.create, payload)
     except Exception as e:
         log.error("Razorpay order creation failed: %s", e)
         await db.booking_slots.delete_many({"booking_id": booking["id"]})
@@ -65,7 +74,9 @@ async def create_pending_with_order(base: dict, notes: dict):
     await db.payments.insert_one({"id": new_id(), "booking_id": booking["id"], "booking_code": booking["code"],
                                   "venue_id": booking["venue_id"], "razorpay_order_id": order["id"], "razorpay_payment_id": None,
                                   "amount": booking["final_amount"], "amount_paise": amount_paise, "status": "created",
-                                  "method": None, "created_at": iso()})
+                                  "method": None, "created_at": iso(),
+                                  **({"route": {"account_hash": routed[1], "amount_paise": amount_paise, "transfer_status": "pending"}}
+                                     if routed else {})})
     booking.pop("_id", None)
     return {"booking": booking, "order": {"id": order["id"], "amount": amount_paise, "currency": "INR", "key_id": rzp_key_id()}}
 
@@ -102,7 +113,9 @@ async def verify_payment(body: VerifyIn, user=Depends(get_current_user)):
     await load_booking_for(pay["booking_id"], user)
     if not verify_checkout_signature(body.razorpay_order_id, body.razorpay_payment_id, body.razorpay_signature):
         raise HTTPException(400, "Payment signature verification failed")
-    return await confirm_paid_order(body.razorpay_order_id, body.razorpay_payment_id)
+    result = await confirm_paid_order(body.razorpay_order_id, body.razorpay_payment_id)
+    await after_capture(body.razorpay_order_id)
+    return result
 
 
 @router.post("/payments/{booking_id}/abandon")
@@ -134,6 +147,7 @@ async def razorpay_webhook(request: Request):
             p = payload.get("payment", {}).get("entity", {})
             if p.get("order_id"):
                 await confirm_paid_order(p["order_id"], p["id"])
+                await after_capture(p["order_id"])
         elif event == "payment.failed":
             p = payload.get("payment", {}).get("entity", {})
             pay = await db.payments.find_one({"razorpay_order_id": p.get("order_id"), "status": "created"}, NO_ID)

@@ -1,7 +1,7 @@
 import { Link, Outlet, useLocation, useOutletContext } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { LayoutDashboard, CalendarDays, UserPlus, BadgeIndianRupee, ScanLine, CreditCard, SlidersHorizontal } from "lucide-react";
+import { LayoutDashboard, CalendarDays, UserPlus, BadgeIndianRupee, ScanLine, CreditCard, SlidersHorizontal, Landmark } from "lucide-react";
 import DashLayout from "@/components/DashLayout";
 import { EmptyState } from "@/components/Bits";
 import { api } from "@/lib/api";
@@ -16,6 +16,7 @@ const ITEMS = [
   { to: "/owner/settings", label: "Venue settings", id: "owner-settings", icon: SlidersHorizontal },
   { to: "/owner/pricing", label: "Price approvals", id: "owner-pricing", icon: BadgeIndianRupee },
   { to: "/owner/scan", label: "Scan QR", id: "owner-scan", icon: ScanLine },
+  { to: "/owner/payouts", label: "Payouts", id: "owner-payouts", icon: Landmark },
   { to: "/owner/subscription", label: "Subscription", id: "owner-subscription", icon: CreditCard },
 ];
 const OPEN_WHEN_BLOCKED = ["/owner/subscription", "/owner/scan", "/owner/bookings"];

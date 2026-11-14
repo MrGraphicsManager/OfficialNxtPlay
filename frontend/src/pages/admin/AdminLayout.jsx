@@ -1,6 +1,6 @@
 import { Link, Outlet } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { LayoutDashboard, Building2, Users, CalendarDays, BadgeIndianRupee, TicketPercent, Wallet, Settings, CreditCard } from "lucide-react";
+import { LayoutDashboard, Building2, Users, CalendarDays, BadgeIndianRupee, TicketPercent, Wallet, Settings, CreditCard, Landmark } from "lucide-react";
 import DashLayout from "@/components/DashLayout";
 import { Button } from "@/components/ui/button";
 import { Stat, PageTitle } from "@/components/Bits";
@@ -12,6 +12,7 @@ const ITEMS = [
   { to: "/admin/venues", label: "Venues", id: "admin-venues", icon: Building2 },
   { to: "/admin/owners", label: "Owners", id: "admin-owners", icon: Users },
   { to: "/admin/subscriptions", label: "Subscriptions", id: "admin-subscriptions", icon: CreditCard },
+  { to: "/admin/payouts", label: "Venue payouts", id: "admin-payouts", icon: Landmark },
   { to: "/admin/bookings", label: "Bookings & payments", id: "admin-bookings", icon: CalendarDays },
   { to: "/admin/pricing", label: "Pricing", id: "admin-pricing", icon: BadgeIndianRupee },
   { to: "/admin/coupons", label: "Coupons", id: "admin-coupons", icon: TicketPercent },

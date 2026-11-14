@@ -467,7 +467,7 @@ async def finance(user=Depends(admin_dep)):
                "date": b["date"], "status": b["status"], "gross_amount": b["gross_amount"], "discount": b.get("discount", 0),
                "paid": b["final_amount"], "refund": refunded, "refund_status": r["status"] if r else None, "platform_fee": fee,
                "net_venue_payable": payable, "settlement_status": b.get("settlement_status", "unsettled"),
-               "settlement_date": b.get("settlement_date")}
+               "settlement_date": b.get("settlement_date"), "route": bool(b.get("route"))}
         ledger.append(row)
         pv = per_venue.setdefault(b["venue_id"], {"venue_id": b["venue_id"], "venue_name": row["venue_name"], "collected": 0,
                                                   "refunded": 0, "platform_fee": 0, "payable": 0, "settled": 0, "outstanding": 0, "cash_total": 0})
@@ -493,7 +493,7 @@ async def finance(user=Depends(admin_dep)):
 @router.post("/settlements")
 async def record_settlement(body: SettleIn, user=Depends(admin_dep)):
     fin = await finance(user)
-    rows = [r for r in fin["ledger"] if r["venue_id"] == body.venue_id and r["settlement_status"] == "unsettled"
+    rows = [r for r in fin["ledger"] if r["venue_id"] == body.venue_id and r["settlement_status"] == "unsettled" and not r["route"]
             and r["net_venue_payable"] > 0 and r["refund_status"] in (None, "processed")]
     if not rows:
         raise HTTPException(400, "Nothing outstanding for this venue")

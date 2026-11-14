@@ -458,9 +458,11 @@ async def call_refund_api(refund):
     if not client_:
         update.update(status="failed", error="Payments are not configured")
     else:
+        opts = {"amount": int(refund["amount"]) * 100, "notes": {"booking": refund["booking_code"]}}
+        if await db.payments.find_one({"razorpay_payment_id": refund["razorpay_payment_id"], "route": {"$exists": True}}, {"_id": 0, "id": 1}):
+            opts["reverse_all"] = 1
         try:
-            r = await run_in_threadpool(client_.payment.refund, refund["razorpay_payment_id"],
-                                        {"amount": int(refund["amount"]) * 100, "notes": {"booking": refund["booking_code"]}})
+            r = await run_in_threadpool(client_.payment.refund, refund["razorpay_payment_id"], opts)
             update.update(razorpay_refund_id=r.get("id"), status=REFUND_STATUS.get(r.get("status"), "initiated"), error=None)
         except Exception as e:  # provider error must be visible to admins
             update.update(status="failed", error=str(e)[:300])
