@@ -53,6 +53,7 @@ async def ensure_indexes():
     await db.email_otps.create_index([("email", 1), ("purpose", 1)])
     await db.email_otps.create_index("expires_at", expireAfterSeconds=0)
     await db.audit_logs.create_index([("target_id", 1), ("created_at", -1)])
+    await db.venue_closures.create_index([("venue_id", 1), ("date", 1)])
     await db.price_requests.create_index([("court_id", 1), ("status", 1)])
 
 

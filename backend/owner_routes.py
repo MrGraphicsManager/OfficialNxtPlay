@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 from core import (db, NO_ID, iso, new_id, gen_code, require_roles, owner_venue_ids, court_slots, court_price_for, today_ist,
                   prepare_booking, reserve_slots, finalize_booking_confirmation, DATE_RE, hm_to_min, TIME_RE)
 from booking_routes import create_pending_with_order
-from subscription_routes import require_operational_subscription
+from subscription_routes import require_operational_subscription, owner_subscription
 
 router = APIRouter(prefix="/api/owner")
 owner_dep = require_roles("owner")
@@ -30,6 +30,31 @@ class DecisionIn(BaseModel):
     approve: bool
 
 
+class OwnerProfileIn(BaseModel):
+    name: str = Field(min_length=2, max_length=80)
+    mobile: str | None = Field(default=None, max_length=15)
+
+
+class VenueOperationsIn(BaseModel):
+    name: str = Field(min_length=2, max_length=100)
+    address: str = Field(min_length=3, max_length=300)
+    open_time: str
+    close_time: str
+
+
+class OwnerCourtIn(BaseModel):
+    sport_id: str
+    name: str = Field(min_length=1, max_length=40)
+    slot_minutes: int = Field(ge=30, le=60)
+    price: int = Field(ge=1)
+
+
+class ClosureIn(BaseModel):
+    date: str
+    court_id: str | None = None
+    reason: str = Field(default="Unavailable", max_length=200)
+
+
 async def ensure_venue(user, venue_id):
     if user.get("must_change_password"):
         raise HTTPException(403, "Change your temporary password before using owner operations")
@@ -38,6 +63,61 @@ async def ensure_venue(user, venue_id):
     if venue_id not in ids:
         raise HTTPException(404, "Venue not found")
     return await db.venues.find_one({"id": venue_id}, NO_ID)
+
+
+@router.get("/profile")
+async def profile(user=Depends(owner_dep)):
+    return {k: user.get(k) for k in ("id", "name", "email", "mobile", "must_change_password")}
+
+
+@router.patch("/profile")
+async def update_profile(body: OwnerProfileIn, user=Depends(owner_dep)):
+    await db.users.update_one({"id": user["id"]}, {"$set": {"name": body.name.strip(), "mobile": body.mobile}})
+    return await db.users.find_one({"id": user["id"]}, {"_id": 0, "password_hash": 0})
+
+
+@router.patch("/venues/{venue_id}/operations")
+async def update_venue_operations(venue_id: str, body: VenueOperationsIn, user=Depends(owner_dep)):
+    await ensure_venue(user, venue_id)
+    if not TIME_RE.match(body.open_time) or not TIME_RE.match(body.close_time) or (body.close_time != "00:00" and body.close_time <= body.open_time):
+        raise HTTPException(400, "Invalid operating hours")
+    await db.venues.update_one({"id": venue_id}, {"$set": body.model_dump()})
+    return await db.venues.find_one({"id": venue_id}, NO_ID)
+
+
+@router.post("/venues/{venue_id}/courts")
+async def add_owner_court(venue_id: str, body: OwnerCourtIn, user=Depends(owner_dep)):
+    await ensure_venue(user, venue_id)
+    if body.slot_minutes not in (30, 60) or not await db.sports.find_one({"id": body.sport_id}):
+        raise HTTPException(400, "Invalid court configuration")
+    sub = await owner_subscription(user["id"])
+    if await db.courts.count_documents({"venue_id": venue_id}) >= sub["court_limit"]:
+        raise HTTPException(400, f"Your {sub['plan']} plan allows up to {sub['court_limit']} courts per venue")
+    court = {"id": new_id(), "venue_id": venue_id, "sport_id": body.sport_id, "name": body.name.strip(),
+             "slot_minutes": body.slot_minutes, "active": True, "created_at": iso(),
+             "prices": [{"price": body.price, "effective_from": today_ist(), "approved_at": iso()}]}
+    await db.courts.insert_one(court)
+    court.pop("_id", None)
+    return court
+
+
+@router.post("/venues/{venue_id}/closures")
+async def add_closure(venue_id: str, body: ClosureIn, user=Depends(owner_dep)):
+    await ensure_venue(user, venue_id)
+    if not DATE_RE.match(body.date): raise HTTPException(400, "Invalid date")
+    if body.court_id and not await db.courts.find_one({"id": body.court_id, "venue_id": venue_id}):
+        raise HTTPException(404, "Court not found")
+    closure = {"id": new_id(), "venue_id": venue_id, "court_id": body.court_id, "date": body.date,
+               "reason": body.reason.strip(), "created_by": user["id"], "created_at": iso()}
+    await db.venue_closures.insert_one(closure)
+    closure.pop("_id", None)
+    return closure
+
+
+@router.get("/venues/{venue_id}/closures")
+async def closures(venue_id: str, user=Depends(owner_dep)):
+    await ensure_venue(user, venue_id)
+    return await db.venue_closures.find({"venue_id": venue_id}, NO_ID).sort("date", 1).to_list(500)
 
 
 @router.get("/venues")
