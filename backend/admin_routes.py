@@ -2,7 +2,7 @@ import re
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from pydantic import BaseModel, EmailStr, Field
 
-from core import (db, NO_ID, USER_PROJ, iso, new_id, hash_pw, require_roles, court_price_for, today_ist, get_settings,
+from core import (db, NO_ID, USER_PROJ, iso, new_id, hash_pw, require_roles, court_price_for, today_ist, get_settings, audit,
                   call_refund_api, rzp, DATE_RE, TIME_RE)
 from booking_routes import do_cancel
 from starlette.concurrency import run_in_threadpool
@@ -113,7 +113,7 @@ async def create_owner_account(o: OwnerIn):
     if await db.users.find_one({"email": email}):
         raise HTTPException(400, "An account with this email already exists")
     user = {"id": new_id(), "name": o.name.strip(), "email": email, "mobile": o.mobile.strip(), "role": "owner",
-            "active": True, "password_hash": hash_pw(o.password), "created_at": iso()}
+            "active": True, "must_change_password": True, "password_hash": hash_pw(o.password), "created_at": iso()}
     await db.users.insert_one(user)
     return user["id"]
 
@@ -192,6 +192,7 @@ async def list_owners(user=Depends(admin_dep)):
 async def create_owner(body: OwnerIn, user=Depends(admin_dep)):
     oid = await create_owner_account(body)
     owner = await db.users.find_one({"id": oid}, USER_PROJ)
+    await audit(user["id"], "owner.created", "owner", oid)
     return owner
 
 
@@ -200,10 +201,12 @@ async def update_owner(owner_id: str, body: OwnerPatch, user=Depends(admin_dep))
     upd = {k: v for k, v in body.model_dump().items() if v is not None and k != "password"}
     if body.password:
         upd["password_hash"] = hash_pw(body.password)
+        upd["must_change_password"] = True
     res = await db.users.update_one({"id": owner_id, "role": "owner"}, {"$set": upd})
     if not res.matched_count:
         raise HTTPException(404, "Owner not found")
     owner = await db.users.find_one({"id": owner_id}, USER_PROJ)
+    await audit(user["id"], "owner.updated", "owner", owner_id, {"fields": sorted(upd)})
     return owner
 
 

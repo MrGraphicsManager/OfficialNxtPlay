@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 from core import (db, NO_ID, iso, new_id, gen_code, require_roles, owner_venue_ids, court_slots, court_price_for, today_ist,
                   prepare_booking, reserve_slots, finalize_booking_confirmation, DATE_RE, hm_to_min, TIME_RE)
 from booking_routes import create_pending_with_order
+from subscription_routes import require_operational_subscription
 
 router = APIRouter(prefix="/api/owner")
 owner_dep = require_roles("owner")
@@ -30,6 +31,9 @@ class DecisionIn(BaseModel):
 
 
 async def ensure_venue(user, venue_id):
+    if user.get("must_change_password"):
+        raise HTTPException(403, "Change your temporary password before using owner operations")
+    await require_operational_subscription(user["id"])
     ids = await owner_venue_ids(user)
     if venue_id not in ids:
         raise HTTPException(404, "Venue not found")

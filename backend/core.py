@@ -133,6 +133,25 @@ def rzp():
     return razorpay.Client(auth=(kid, ks))
 
 
+SUBSCRIPTION_PLANS = {
+    "starter": {"amount": 399, "court_limit": 5, "env": "RAZORPAY_PLAN_399"},
+    "growth": {"amount": 699, "court_limit": 10, "env": "RAZORPAY_PLAN_699"},
+}
+
+
+def subscription_plan(key: str):
+    plan = SUBSCRIPTION_PLANS.get(key)
+    if not plan:
+        raise HTTPException(400, "Invalid subscription plan")
+    return {"key": key, **plan}
+
+
+async def audit(actor_id: str, action: str, target_type: str, target_id: str, details: dict | None = None):
+    await db.audit_logs.insert_one({"id": new_id(), "actor_id": actor_id, "action": action,
+                                    "target_type": target_type, "target_id": target_id,
+                                    "details": details or {}, "created_at": iso()})
+
+
 def verify_checkout_signature(order_id, payment_id, signature) -> bool:
     secret = os.environ.get("RAZORPAY_KEY_SECRET", "")
     if not secret or not signature:
