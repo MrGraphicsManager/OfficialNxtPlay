@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: nxtplay-api
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn server:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: MONGO_URL
+        sync: false
+      - key: DB_NAME
+        value: nxtplay
+      - key: JWT_SECRET
+        sync: false
+      - key: CORS_ORIGINS
+        value: https://official-nxt-play.vercel.app
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: ADMIN_NAME
+        value: NXTPLAY Admin
+      - key: SEED_DEMO_DATA
+        value: "false"
