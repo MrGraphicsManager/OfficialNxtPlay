@@ -274,15 +274,46 @@ async def finalize_booking_confirmation(booking, extra: dict):
     update = {"status": "confirmed", "qr_token": secrets.token_urlsafe(24), "confirmed_at": iso(), "updated_at": iso(),
               "commission_pct": pct, "platform_fee": fee, "venue_payable": final - fee if online else 0,
               "settlement_status": "unsettled" if online else "not_applicable", **extra}
-    await db.bookings.update_one({"id": booking["id"]}, {"$set": update})
-    if booking.get("coupon_code"):
+    await db.bookings.update_one(
+        {"id": booking["id"], "status": "pending_payment"},
+        {"$set": update},
+    )
+    confirmed = await db.bookings.find_one({"id": booking["id"]}, NO_ID)
+    if not confirmed or confirmed.get("status") != "confirmed":
+        return confirmed
+    if confirmed.get("coupon_code"):
         try:
-            await db.coupon_redemptions.insert_one({"id": new_id(), "booking_id": booking["id"], "coupon_code": booking["coupon_code"],
-                                                    "user_id": booking.get("user_id"), "discount": booking.get("discount", 0), "created_at": iso()})
-            await db.coupons.update_one({"code": booking["coupon_code"]}, {"$inc": {"used_count": 1}})
+            await db.coupon_redemptions.insert_one({"id": new_id(), "booking_id": confirmed["id"], "coupon_code": confirmed["coupon_code"],
+                                                    "user_id": confirmed.get("user_id"), "discount": confirmed.get("discount", 0), "created_at": iso()})
+            await db.coupons.update_one({"code": confirmed["coupon_code"]}, {"$inc": {"used_count": 1}})
         except DuplicateKeyError:
             pass
-    return await db.bookings.find_one({"id": booking["id"]}, NO_ID)
+    return confirmed
+
+
+async def complete_captured_payment(pay, booking, method: str | None):
+    booking = await db.bookings.find_one({"id": pay["booking_id"]}, NO_ID)
+    if not booking:
+        raise HTTPException(404, "Booking not found for payment")
+    if booking["status"] == "confirmed":
+        return await finalize_booking_confirmation(booking, {"payment_id": pay["id"], "paid_via": method})
+    if booking["status"] == "cancelled" and booking.get("cancel_reason") == "Slot no longer available after payment; automatic refund":
+        await initiate_refund(booking, "Slot conflict after payment")
+        return await db.bookings.find_one({"id": booking["id"]}, NO_ID)
+    if booking["status"] != "pending_payment":
+        return booking
+
+    held = await db.booking_slots.count_documents({"booking_id": booking["id"]})
+    if held != len(booking["slot_starts"]):
+        await db.booking_slots.delete_many({"booking_id": booking["id"]})
+        if not await reserve_slots(booking["id"], booking["court_id"], booking["date"], booking["slot_starts"]):
+            await db.bookings.update_one({"id": booking["id"], "status": "pending_payment"}, {"$set": {
+                "status": "cancelled", "cancel_reason": "Slot no longer available after payment; automatic refund", "cancelled_at": iso(),
+                "payment_id": pay["id"], "paid_via": method}})
+            booking = await db.bookings.find_one({"id": booking["id"]}, NO_ID)
+            await initiate_refund(booking, "Slot conflict after payment")
+            return await db.bookings.find_one({"id": booking["id"]}, NO_ID)
+    return await finalize_booking_confirmation(booking, {"payment_id": pay["id"], "paid_via": method})
 
 
 async def confirm_paid_order(order_id: str, payment_id: str):
@@ -290,8 +321,10 @@ async def confirm_paid_order(order_id: str, payment_id: str):
     if not pay:
         raise HTTPException(404, "Payment order not found")
     booking = await db.bookings.find_one({"id": pay["booking_id"]}, NO_ID)
+    if not booking:
+        raise HTTPException(404, "Booking not found for payment")
     if pay["status"] == "captured":
-        return booking
+        return await complete_captured_payment(pay, booking, pay.get("method"))
     client_ = rzp()
     if not client_:
         raise HTTPException(503, "Payments are not configured")
@@ -302,24 +335,14 @@ async def confirm_paid_order(order_id: str, payment_id: str):
         p = await run_in_threadpool(client_.payment.capture, payment_id, pay["amount_paise"], {"currency": "INR"})
     if p.get("status") != "captured":
         raise HTTPException(400, f"Payment not captured (status: {p.get('status')})")
-    res = await db.payments.find_one_and_update(
+    await db.payments.update_one(
         {"id": pay["id"], "status": {"$ne": "captured"}},
-        {"$set": {"status": "captured", "razorpay_payment_id": payment_id, "method": p.get("method"), "captured_at": iso()}})
-    if res is None:
-        return await db.bookings.find_one({"id": pay["booking_id"]}, NO_ID)
-    if booking["status"] == "confirmed":
-        return booking
-    held = await db.booking_slots.count_documents({"booking_id": booking["id"]})
-    if held != len(booking["slot_starts"]):
-        await db.booking_slots.delete_many({"booking_id": booking["id"]})
-        if not await reserve_slots(booking["id"], booking["court_id"], booking["date"], booking["slot_starts"]):
-            await db.bookings.update_one({"id": booking["id"]}, {"$set": {
-                "status": "cancelled", "cancel_reason": "Slot no longer available after payment; automatic refund", "cancelled_at": iso(),
-                "payment_id": pay["id"], "paid_via": p.get("method")}})
-            b = await db.bookings.find_one({"id": booking["id"]}, NO_ID)
-            await initiate_refund(b, "Slot conflict after payment")
-            return await db.bookings.find_one({"id": booking["id"]}, NO_ID)
-    return await finalize_booking_confirmation(booking, {"payment_id": pay["id"], "paid_via": p.get("method")})
+        {"$set": {"status": "captured", "razorpay_payment_id": payment_id, "method": p.get("method"), "captured_at": iso()}},
+    )
+    pay = await db.payments.find_one({"id": pay["id"]}, NO_ID)
+    if pay.get("razorpay_payment_id") != payment_id:
+        raise HTTPException(409, "A different payment was already recorded for this order")
+    return await complete_captured_payment(pay, booking, pay.get("method"))
 
 
 REFUND_STATUS = {"processed": "processed", "pending": "initiated", "failed": "failed", "created": "initiated"}
