@@ -82,7 +82,7 @@ export function AdminFinance() {
   };
   return (
     <div className="space-y-8">
-      <PageTitle title="Finance" sub={`Platform commission: ${data.commission_pct}% on online bookings. Settlements are recorded manually.`} />
+      <PageTitle title="Finance" sub={`0% booking commission on new bookings (older bookings keep their recorded fee). Settlements are recorded manually.`} />
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Stat testId="fin-online" label="Online collected" value={inr(t.collected)} />
         <Stat testId="fin-refunded" label="Refunded" value={inr(t.refunded)} />
@@ -179,7 +179,7 @@ export function AdminSettings() {
   }, [data]);
   const save = async () => {
     try {
-      await api.put("/admin/settings", { commission_pct: Number(s.commission_pct), show_demo: s.show_demo });
+      await api.put("/admin/settings", { commission_pct: 0, show_demo: s.show_demo });
       toast.success("Settings saved");
     } catch (e) {
       toast.error(errMsg(e));
@@ -190,7 +190,7 @@ export function AdminSettings() {
       <PageTitle title="Settings" />
       {s && (
         <div className="surface p-5 grid sm:grid-cols-3 gap-4 items-end" data-testid="settings-form">
-          <Field label="Platform commission %" hint="Applies to new online bookings"><input type="number" min={0} max={50} step="0.5" className="field" value={s.commission_pct} onChange={(e) => setS({ ...s, commission_pct: e.target.value })} data-testid="settings-commission-input" /></Field>
+          <div className="text-sm" data-testid="settings-commission-info"><p className="text-muted-foreground">Booking commission</p><p className="font-bold text-primary">0% — NXTPLAY earns from owner subscriptions</p></div>
           <label className="flex items-center gap-2 text-sm h-11"><Switch checked={s.show_demo} onCheckedChange={(v) => setS({ ...s, show_demo: v })} data-testid="settings-show-demo-switch" />Show demo venues publicly</label>
           <Button onClick={save} data-testid="settings-save-btn">Save settings</Button>
         </div>

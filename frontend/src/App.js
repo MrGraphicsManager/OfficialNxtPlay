@@ -17,6 +17,9 @@ import { OwnerHome, OwnerBookings } from "@/pages/owner/OwnerPages";
 import OwnerWalkin from "@/pages/owner/OwnerWalkin";
 import OwnerPricing from "@/pages/owner/OwnerPricing";
 import OwnerScan from "@/pages/owner/OwnerScan";
+import OwnerPlan from "@/pages/owner/OwnerPlan";
+import OwnerSettings from "@/pages/owner/OwnerSettings";
+import AdminSubscriptions from "@/pages/admin/AdminSubscriptions";
 import AdminLayout, { AdminHome } from "@/pages/admin/AdminLayout";
 import { AdminVenues, AdminVenueManage } from "@/pages/admin/AdminVenues";
 import AdminVenueWizard from "@/pages/admin/AdminVenueWizard";
@@ -51,6 +54,8 @@ export default function App() {
             <Route path="walk-in" element={<OwnerWalkin />} />
             <Route path="pricing" element={<OwnerPricing />} />
             <Route path="scan" element={<OwnerScan />} />
+            <Route path="subscription" element={<OwnerPlan />} />
+            <Route path="settings" element={<OwnerSettings />} />
           </Route>
           <Route path="/admin" element={<RequireRole role="admin"><AdminLayout /></RequireRole>}>
             <Route index element={<AdminHome />} />
@@ -58,6 +63,7 @@ export default function App() {
             <Route path="venues/new" element={<AdminVenueWizard />} />
             <Route path="venues/:id" element={<AdminVenueManage />} />
             <Route path="owners" element={<AdminOwners />} />
+            <Route path="subscriptions" element={<AdminSubscriptions />} />
             <Route path="bookings" element={<AdminBookings />} />
             <Route path="pricing" element={<AdminPricing />} />
             <Route path="coupons" element={<AdminCoupons />} />

@@ -4,18 +4,23 @@ import os
 import uuid
 import asyncio
 from datetime import datetime, timedelta
-from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import pytest
 import requests
-from dotenv import dotenv_values
-
-FE_ENV = dotenv_values("/app/frontend/.env")
-BASE_URL = (os.environ.get("REACT_APP_BACKEND_URL") or FE_ENV["REACT_APP_BACKEND_URL"]).rstrip("/")
+BASE_URL = os.environ.get("NXTPLAY_E2E_BASE_URL", "").rstrip("/")
 API = f"{BASE_URL}/api"
-ADMIN = {"email": "nxtplayindia@gmail.com", "password": "Nxp-Admin-IQYxyQ1CvCW4"}
-DEMO_OWNER = {"email": "demo.owner@nxtplay.dev", "password": "Nxp-Owner-GmFd9JmYSG5s"}
+ADMIN = {"email": os.environ.get("NXTPLAY_E2E_ADMIN_EMAIL", ""), "password": os.environ.get("NXTPLAY_E2E_ADMIN_PASSWORD", "")}
+DEMO_OWNER = {"email": os.environ.get("NXTPLAY_E2E_OWNER_EMAIL", ""), "password": os.environ.get("NXTPLAY_E2E_OWNER_PASSWORD", "")}
+MONGO_URL = os.environ.get("NXTPLAY_E2E_MONGO_URL", "")
+DB_NAME = os.environ.get("NXTPLAY_E2E_DB_NAME", "")
+REQUIRED_ENV = ("NXTPLAY_E2E_BASE_URL", "NXTPLAY_E2E_ADMIN_EMAIL", "NXTPLAY_E2E_ADMIN_PASSWORD",
+                "NXTPLAY_E2E_OWNER_EMAIL", "NXTPLAY_E2E_OWNER_PASSWORD", "NXTPLAY_E2E_MONGO_URL", "NXTPLAY_E2E_DB_NAME")
+
+pytestmark = pytest.mark.skipif(
+    any(not os.environ.get(name) for name in REQUIRED_ENV),
+    reason="Set the NXTPLAY_E2E_* environment variables to run destructive integration tests.",
+)
 IST = ZoneInfo("Asia/Kolkata")
 UID = uuid.uuid4().hex[:6].upper()
 S = {}  # shared state
@@ -27,8 +32,7 @@ def H(tok):
 
 def mongo():
     from pymongo import MongoClient
-    env = dotenv_values(Path("/app/backend/.env"))
-    return MongoClient(env["MONGO_URL"])[env["DB_NAME"]]
+    return MongoClient(MONGO_URL)[DB_NAME]
 
 
 def today():
