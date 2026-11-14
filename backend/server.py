@@ -9,13 +9,13 @@ from fastapi import FastAPI  # noqa: E402
 from starlette.middleware.cors import CORSMiddleware  # noqa: E402
 
 from core import db, client, iso, new_id, hash_pw, verify_pw  # noqa: E402
-import auth_routes, public_routes, booking_routes, owner_routes, admin_routes  # noqa: E402
+import auth_routes, public_routes, booking_routes, owner_routes, admin_routes, subscription_routes  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 log = logging.getLogger("nxtplay")
 
 app = FastAPI(title="NXTPLAY API")
-for r in (auth_routes, public_routes, booking_routes, owner_routes, admin_routes):
+for r in (auth_routes, public_routes, booking_routes, owner_routes, admin_routes, subscription_routes):
     app.include_router(r.router)
 
 app.add_middleware(
@@ -48,6 +48,12 @@ async def ensure_indexes():
     await db.coupon_redemptions.create_index("booking_id", unique=True)
     await db.qr_checkins.create_index("booking_id", unique=True)
     await db.webhook_events.create_index("event_id", unique=True)
+    await db.subscription_events.create_index("event_id", unique=True)
+    await db.subscriptions.create_index("owner_id", unique=True)
+    await db.email_otps.create_index([("email", 1), ("purpose", 1)])
+    await db.email_otps.create_index("expires_at", expireAfterSeconds=0)
+    await db.audit_logs.create_index([("target_id", 1), ("created_at", -1)])
+    await db.venue_closures.create_index([("venue_id", 1), ("date", 1)])
     await db.price_requests.create_index([("court_id", 1), ("status", 1)])
 
 

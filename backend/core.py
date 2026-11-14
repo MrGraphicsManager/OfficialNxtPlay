@@ -133,6 +133,25 @@ def rzp():
     return razorpay.Client(auth=(kid, ks))
 
 
+SUBSCRIPTION_PLANS = {
+    "starter": {"amount": 399, "court_limit": 5, "env": "RAZORPAY_PLAN_399"},
+    "growth": {"amount": 699, "court_limit": 10, "env": "RAZORPAY_PLAN_699"},
+}
+
+
+def subscription_plan(key: str):
+    plan = SUBSCRIPTION_PLANS.get(key)
+    if not plan:
+        raise HTTPException(400, "Invalid subscription plan")
+    return {"key": key, **plan}
+
+
+async def audit(actor_id: str, action: str, target_type: str, target_id: str, details: dict | None = None):
+    await db.audit_logs.insert_one({"id": new_id(), "actor_id": actor_id, "action": action,
+                                    "target_type": target_type, "target_id": target_id,
+                                    "details": details or {}, "created_at": iso()})
+
+
 def verify_checkout_signature(order_id, payment_id, signature) -> bool:
     secret = os.environ.get("RAZORPAY_KEY_SECRET", "")
     if not secret or not signature:
@@ -182,10 +201,14 @@ async def court_slots(venue, court, date: str):
     taken = await taken_starts(court["id"], date)
     price = court_price_for(court, date)
     now = now_ist()
+    closed = await db.venue_closures.find_one({"venue_id": venue["id"], "date": date,
+                                                "$or": [{"court_id": None}, {"court_id": court["id"]}]}, NO_ID)
     out = []
     for s in range(o, c - dur + 1, dur):
         status = "available"
-        if s in taken:
+        if closed:
+            status = "unavailable"
+        elif s in taken:
             status = "booked"
         elif slot_dt(date, s) <= now:
             status = "past"
@@ -213,6 +236,9 @@ async def prepare_booking(court_id: str, date: str, start_min: int, end_min: int
         raise HTTPException(400, "Venue is not accepting bookings")
     if not DATE_RE.match(date or ""):
         raise HTTPException(400, "Invalid date")
+    if await db.venue_closures.find_one({"venue_id": venue["id"], "date": date,
+                                          "$or": [{"court_id": None}, {"court_id": court_id}]}, NO_ID):
+        raise HTTPException(400, "This venue or court is unavailable on the selected date")
     d = datetime.strptime(date, "%Y-%m-%d").date()
     if d > (now_ist().date() + timedelta(days=MAX_ADVANCE_DAYS)):
         raise HTTPException(400, f"Bookings open up to {MAX_ADVANCE_DAYS} days in advance")

@@ -59,8 +59,15 @@ export function Login() {
 export function Signup() {
   const { register } = useAuth();
   const nav = useNavigate();
-  const [f, bind] = useForm({ name: "", email: "", password: "", age: "" });
+  const [f, bind] = useForm({ name: "", email: "", password: "", age: "", otp: "" });
   const [busy, setBusy] = useState(false);
+  const [sent, setSent] = useState(false);
+  const sendOtp = async () => {
+    if (!f.email) return toast.error("Enter your email first");
+    setBusy(true);
+    try { await api.post("/auth/registration-otp", { email: f.email }); setSent(true); toast.success("Verification code sent"); }
+    catch (err) { toast.error(errMsg(err)); } finally { setBusy(false); }
+  };
   const submit = async (e) => {
     e.preventDefault();
     setBusy(true);
@@ -78,12 +85,13 @@ export function Signup() {
     <Shell title="Join NXTPLAY" badge="Sign up">
       <form onSubmit={submit} className="space-y-4" data-testid="signup-form">
         <Field label="Full name"><input className="field" required minLength={2} value={f.name} onChange={bind("name")} data-testid="signup-name-input" /></Field>
-        <Field label="Email"><input className="field" type="email" required value={f.email} onChange={bind("email")} data-testid="signup-email-input" /></Field>
+        <Field label="Email"><div className="flex gap-2"><input className="field" type="email" required value={f.email} onChange={bind("email")} data-testid="signup-email-input" /><Button type="button" variant="outline" disabled={busy} onClick={sendOtp}>Send code</Button></div></Field>
+        {sent && <Field label="Email verification code" hint="Six digits; expires in 10 minutes"><input className="field" inputMode="numeric" pattern="[0-9]{6}" required minLength={6} maxLength={6} value={f.otp} onChange={bind("otp")} data-testid="signup-otp-input" /></Field>}
         <div className="grid grid-cols-[1fr_100px] gap-3">
           <Field label="Password" hint="Min 8 characters"><input className="field" type="password" required minLength={8} value={f.password} onChange={bind("password")} data-testid="signup-password-input" /></Field>
           <Field label="Age"><input className="field" type="number" required min={5} max={100} value={f.age} onChange={bind("age")} data-testid="signup-age-input" /></Field>
         </div>
-        <Button className="w-full h-11 font-bold" disabled={busy} data-testid="signup-submit-btn">{busy ? "Creating…" : "Create account"}</Button>
+        <Button className="w-full h-11 font-bold" disabled={busy || !sent} data-testid="signup-submit-btn">{busy ? "Creating…" : "Create account"}</Button>
       </form>
       <p className="text-sm mt-5 text-muted-foreground">Already have an account? <Link to="/login" className="text-secondary hover:underline">Login</Link></p>
     </Shell>

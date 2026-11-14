@@ -17,6 +17,7 @@ import { OwnerHome, OwnerBookings } from "@/pages/owner/OwnerPages";
 import OwnerWalkin from "@/pages/owner/OwnerWalkin";
 import OwnerPricing from "@/pages/owner/OwnerPricing";
 import OwnerScan from "@/pages/owner/OwnerScan";
+import OwnerSubscription from "@/pages/owner/OwnerSubscription";
 import AdminLayout, { AdminHome } from "@/pages/admin/AdminLayout";
 import { AdminVenues, AdminVenueManage } from "@/pages/admin/AdminVenues";
 import AdminVenueWizard from "@/pages/admin/AdminVenueWizard";
@@ -51,6 +52,7 @@ export default function App() {
             <Route path="walk-in" element={<OwnerWalkin />} />
             <Route path="pricing" element={<OwnerPricing />} />
             <Route path="scan" element={<OwnerScan />} />
+            <Route path="subscription" element={<OwnerSubscription />} />
           </Route>
           <Route path="/admin" element={<RequireRole role="admin"><AdminLayout /></RequireRole>}>
             <Route index element={<AdminHome />} />

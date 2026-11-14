@@ -1,7 +1,7 @@
 import { Link, Outlet, useOutletContext } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { LayoutDashboard, CalendarDays, UserPlus, BadgeIndianRupee, ScanLine } from "lucide-react";
+import { LayoutDashboard, CalendarDays, UserPlus, BadgeIndianRupee, ScanLine, CreditCard } from "lucide-react";
 import DashLayout from "@/components/DashLayout";
 import { EmptyState } from "@/components/Bits";
 import { api } from "@/lib/api";
@@ -13,6 +13,7 @@ const ITEMS = [
   { to: "/owner/walk-in", label: "Walk-in", id: "owner-walkin", icon: UserPlus },
   { to: "/owner/pricing", label: "Price approvals", id: "owner-pricing", icon: BadgeIndianRupee },
   { to: "/owner/scan", label: "Scan QR", id: "owner-scan", icon: ScanLine },
+  { to: "/owner/subscription", label: "Subscription", id: "owner-subscription", icon: CreditCard },
 ];
 
 export const useOwner = () => useOutletContext();
