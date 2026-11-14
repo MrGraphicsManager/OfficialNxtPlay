@@ -88,8 +88,11 @@ async def owner_subscription(owner_id):
 
 
 async def require_operational_subscription(owner_id: str):
-    st = sub_state(await owner_subscription(owner_id))
+    owner = await db.users.find_one({"id": owner_id}, {"_id": 0, "requires_plan": 1})
+    st = sub_state(await owner_subscription(owner_id), bool(owner and owner.get("requires_plan")))
     if not st["operational"]:
+        if st["state"] == "awaiting_plan":
+            raise HTTPException(403, "NXTPLAY will assign your subscription plan before you can operate your venue.")
         if st["state"] == "awaiting_authorization":
             raise HTTPException(403, "Authorize your NXTPLAY monthly plan to start operating your venue.")
         raise HTTPException(403, "Your subscription has expired. Renew to restore access. Your venue data is preserved.")
@@ -266,7 +269,7 @@ async def mine(user=Depends(owner_dep)):
     sub = await owner_subscription(user["id"])
     pays = await db.subscription_payments.find({"owner_id": user["id"]}, PAY_PROJ).sort("created_at", -1).to_list(50)
     plan = subscription_plan(sub["plan"]) if sub else None
-    return {"subscription": view(sub), "access": sub_state(sub), "payments": pays,
+    return {"subscription": view(sub), "access": sub_state(sub, bool(user.get("requires_plan"))), "payments": pays,
             "must_change_password": bool(user.get("must_change_password")),
             "payments_configured": bool(rzp() and plan and os.environ.get(plan["env"]))}
 
@@ -331,7 +334,7 @@ async def admin_owners(user=Depends(admin_dep)):
         sub = await owner_subscription(o["id"])
         venues = [{"id": v["id"], "name": v["name"], "courts": await db.courts.count_documents({"venue_id": v["id"]})}
                   async for v in db.venues.find({"owner_ids": o["id"]}, NO_ID)]
-        out.append({"owner": o, "subscription": view(sub), "access": sub_state(sub), "venues": venues})
+        out.append({"owner": o, "subscription": view(sub), "access": sub_state(sub, bool(o.get("requires_plan"))), "venues": venues})
     return out
 
 
@@ -346,7 +349,7 @@ async def admin_owner_detail(owner_id: str, user=Depends(admin_dep)):
         p["payment_ref"], p["invoice_ref"] = dec(p.pop("ref_enc", None)), dec(p.pop("invoice_enc", None))
         pays.append(p)
     targets = [owner_id] + ([sub["id"]] if sub else [])
-    return {"owner": owner, "subscription": view(sub), "access": sub_state(sub), "payments": pays,
+    return {"owner": owner, "subscription": view(sub), "access": sub_state(sub, bool(owner.get("requires_plan"))), "payments": pays,
             "provider_subscription_id": dec(sub.get("rzp_sub_enc")) if sub else None,
             "history": await db.subscription_history.find({"owner_id": owner_id}, NO_ID).sort("created_at", -1).to_list(200),
             "audit": await db.audit_logs.find({"target_id": {"$in": targets}}, NO_ID).sort("created_at", -1).to_list(200),
@@ -361,7 +364,7 @@ async def create_owner(body: CreateOwnerIn, user=Depends(admin_dep)):
     if await db.users.find_one({"email": email}):
         raise HTTPException(400, "An account with this email already exists")
     owner = {"id": new_id(), "name": body.name.strip(), "email": email, "mobile": body.mobile.strip(), "role": "owner",
-             "active": True, "must_change_password": True, "password_hash": hash_pw(secrets.token_urlsafe(16)), "created_at": iso()}
+             "active": True, "must_change_password": True, "requires_plan": True, "password_hash": hash_pw(secrets.token_urlsafe(16)), "created_at": iso()}
     await db.users.insert_one(owner)
     sub = new_sub_doc(owner["id"], plan, body.start_date, body.expiry_date)
     await db.subscriptions.insert_one(sub)

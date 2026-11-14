@@ -87,6 +87,8 @@ async def profile(user=Depends(owner_dep)):
 
 @router.patch("/profile")
 async def update_profile(body: OwnerProfileIn, user=Depends(owner_dep)):
+    if user.get("must_change_password"):
+        raise HTTPException(403, "Change your temporary password first")
     await db.users.update_one({"id": user["id"]}, {"$set": {"name": body.name.strip(), "mobile": body.mobile,
                                                           "business_name": (body.business_name or "").strip() or None}})
     return await db.users.find_one({"id": user["id"]}, {"_id": 0, "password_hash": 0, "reset": 0, "login_fail": 0})

@@ -10,7 +10,7 @@ import { fmtDate, fmtDateTime, inr } from "@/lib/format";
 import { useOwner } from "@/pages/owner/OwnerLayout";
 
 const STATE_LABEL = {
-  legacy: "No plan assigned", awaiting_authorization: "Awaiting authorization", active: "Active",
+  legacy: "No plan assigned", awaiting_plan: "Waiting for plan assignment", awaiting_authorization: "Awaiting authorization", active: "Active",
   cancelling: "Cancelled — active until period end", grace: "Payment overdue (grace period)", expired: "Expired",
 };
 
@@ -47,6 +47,13 @@ export function ForcePasswordChange({ onDone }) {
 
 export function SubscriptionGate({ info }) {
   const expired = info.access.state === "expired";
+  if (info.access.state === "awaiting_plan") return (
+    <div className="max-w-xl surface p-6 sm:p-8" data-testid="subscription-gate">
+      <span className="pixel-badge">Setup in progress</span>
+      <h2 className="headline text-4xl mt-4">Your plan is on its way</h2>
+      <p className="text-muted-foreground mt-3">NXTPLAY will assign your subscription plan shortly. You can then authorize it and start operating your venue.</p>
+    </div>
+  );
   return (
     <div className="max-w-xl surface p-6 sm:p-8" data-testid="subscription-gate">
       <span className="pixel-badge">{expired ? "Subscription expired" : "Activation pending"}</span>
@@ -64,7 +71,14 @@ export function SubscriptionGate({ info }) {
 export function SubscriptionBanner({ info }) {
   const a = info?.access;
   const sub = info?.subscription;
-  if (!a || !sub || !(a.expiring_soon || a.payment_issue)) return null;
+  if (!a || !sub) return null;
+  if (a.state === "expired") return (
+    <div className="mb-6 p-4 border border-red-500/50 bg-red-500/10 rounded-md text-sm flex gap-3" data-testid="subscription-banner">
+      <AlertTriangle className="w-5 h-5 text-red-400 shrink-0" />
+      <p><span className="font-semibold">Subscription expired.</span> <span className="text-muted-foreground">You can view bookings and scan QR codes. Renew to restore everything else; your data is preserved.</span> <Link to="/owner/subscription" className="text-primary hover:underline" data-testid="banner-subscription-link">Renew now</Link></p>
+    </div>
+  );
+  if (!(a.expiring_soon || a.payment_issue)) return null;
   const issue = a.payment_issue || a.state === "grace";
   return (
     <div className={`mb-6 p-4 border flex gap-3 items-start rounded-md ${issue ? "border-red-500/50 bg-red-500/10" : "border-primary/40 bg-primary/5"}`} data-testid="subscription-banner">
@@ -112,7 +126,7 @@ export default function OwnerPlan() {
     <div><PageTitle title="Subscription" sub="Your NXTPLAY venue plan" />
       <div className="surface p-5 text-muted-foreground" data-testid="sub-none">No plan has been assigned yet. Your account keeps working normally until NXTPLAY assigns one.</div></div>
   );
-  const needsAction = ["awaiting_authorization", "expired", "cancelling"].includes(a.state) || (!sub.has_provider_subscription && a.state !== "legacy");
+  const needsAction = ["awaiting_authorization", "expired", "cancelling", "grace"].includes(a.state);
   return (
     <div className="space-y-6">
       <PageTitle title="Subscription" sub="Plan, renewal status and payment history" />
@@ -130,7 +144,6 @@ export default function OwnerPlan() {
           {sub.last_payment_error && <p className="text-red-400 text-sm mt-4" data-testid="sub-payment-error">{sub.last_payment_error}</p>}
         </div>
         <div className="flex flex-col gap-2 md:items-end">
-          <StatusBadge status={sub.status} />
           {needsAction && (
             <Button className="font-bold" disabled={busy || !info.payments_configured} onClick={authorize} data-testid="sub-authorize-btn">
               {busy ? "Opening Razorpay…" : a.state === "expired" || a.state === "cancelling" ? "Renew subscription" : "Authorize monthly auto-pay"}

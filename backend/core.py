@@ -182,9 +182,11 @@ def lookup_hash(value: str) -> str:
     return hmac.new(JWT_SECRET.encode(), f"lookup:{value}".encode(), hashlib.sha256).hexdigest()
 
 
-def sub_state(sub):
+def sub_state(sub, requires_plan: bool = False):
     base = {"paid_until": None, "days_left": None, "expiring_soon": False, "payment_issue": False, "grace_until": None}
     if not sub:
+        if requires_plan:
+            return {**base, "state": "awaiting_plan", "operational": False}
         return {**base, "state": "legacy", "operational": True}
     now = now_utc()
     paid = datetime.fromisoformat(sub["paid_until"]) if sub.get("paid_until") else None
@@ -208,7 +210,9 @@ async def venue_subs(venue):
 
 async def venue_operational(venue) -> bool:
     subs = await venue_subs(venue)
-    return not subs or any(sub_state(s)["operational"] for s in subs)
+    if not subs:
+        return not await db.users.find_one({"id": {"$in": venue.get("owner_ids", [])}, "requires_plan": True}, {"_id": 0, "id": 1})
+    return any(sub_state(s)["operational"] for s in subs)
 
 
 async def court_limit_for_venue(venue):

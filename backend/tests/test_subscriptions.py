@@ -295,9 +295,13 @@ def test_14_renewal_after_long_expiry():
 
 
 def test_15_legacy_owner_keeps_working():
-    t = req("POST", "/admin/owners", S["admin"], json={"name": "TEST Legacy", "email": "legacy@nxtplaytest.com", "mobile": "9999900003", "password": "Legacy#Pass1"})
+    t = req("POST", "/admin/owners", S["admin"], json={"name": "TEST New Via Owners Page", "email": "newowner@nxtplaytest.com", "mobile": "9999900003", "password": "Legacy#Pass1"})
     assert t.status_code == 200
-    run(core.db.users.update_one({"email": "legacy@nxtplaytest.com"}, {"$set": {"must_change_password": False}}))
+    run(core.db.users.update_one({"email": "newowner@nxtplaytest.com"}, {"$set": {"must_change_password": False}}))
+    tn = login("newowner@nxtplaytest.com", "Legacy#Pass1")
+    assert req("GET", "/subscriptions/mine", tn).json()["access"]["state"] == "awaiting_plan", "new owners cannot bypass subscriptions"
+    run(core.db.users.insert_one({"id": core.new_id(), "name": "TEST Legacy", "email": "legacy@nxtplaytest.com", "role": "owner", "active": True,
+                                  "password_hash": core.hash_pw("Legacy#Pass1"), "created_at": core.iso()}))
     tl = login("legacy@nxtplaytest.com", "Legacy#Pass1")
     assert req("GET", "/subscriptions/mine", tl).json()["access"]["state"] == "legacy"
     assert core.sub_state(None)["operational"] is True

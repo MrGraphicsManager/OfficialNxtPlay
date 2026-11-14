@@ -113,7 +113,7 @@ async def create_owner_account(o: OwnerIn):
     if await db.users.find_one({"email": email}):
         raise HTTPException(400, "An account with this email already exists")
     user = {"id": new_id(), "name": o.name.strip(), "email": email, "mobile": o.mobile.strip(), "role": "owner",
-            "active": True, "must_change_password": True, "password_hash": hash_pw(o.password), "created_at": iso()}
+            "active": True, "must_change_password": True, "requires_plan": True, "password_hash": hash_pw(o.password), "created_at": iso()}
     await db.users.insert_one(user)
     return user["id"]
 

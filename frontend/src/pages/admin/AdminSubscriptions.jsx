@@ -9,7 +9,7 @@ import { api, errMsg } from "@/lib/api";
 import { addDays, fmtDate, fmtDateTime, inr, todayIST } from "@/lib/format";
 
 const PLANS = [{ value: "starter", label: "Starter · ₹399/month · up to 5 courts" }, { value: "growth", label: "Growth · ₹699/month · up to 10 courts" }];
-const STATE = { legacy: "No plan (legacy access)", awaiting_authorization: "Awaiting authorization", active: "Active", cancelling: "Cancelling", grace: "Grace period", expired: "Expired" };
+const STATE = { legacy: "No plan (legacy access)", awaiting_plan: "Needs a plan", awaiting_authorization: "Awaiting authorization", active: "Active", cancelling: "Cancelling", grace: "Grace period", expired: "Expired" };
 const day = (s) => (s ? fmtDate(s.slice(0, 10)) : "—");
 const act = async (fn, ok) => { try { const r = await fn(); toast.success(ok); return r?.data ?? true; } catch (e) { toast.error(errMsg(e)); return null; } };
 const PlanFields = ({ f, setF, prefix }) => (
@@ -82,11 +82,15 @@ function Manage({ ownerId, onClose, onChanged, onCreds }) {
           </div>
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" data-testid="manage-toggle-active-btn" onClick={() => act(() => api.patch(`/admin/owners/${ownerId}`, { active: !d.owner.active }), d.owner.active ? "Owner suspended" : "Owner activated").then(done)}>{d.owner.active ? "Suspend account" : "Activate account"}</Button>
-            <Button variant="outline" data-testid="manage-resend-invite-btn" onClick={() => act(() => api.post(`/subscriptions/admin/owners/${ownerId}/resend-invite`), "New login issued").then((r) => r && onCreds(r))}>New temporary login</Button>
-            {sub && <Button variant="outline" data-testid="manage-sync-btn" onClick={() => act(() => api.post(`/subscriptions/admin/owners/${ownerId}/sync`), "Synced with Razorpay").then(done)}>Sync with Razorpay</Button>}
+            <Button variant="outline" data-testid="manage-resend-invite-btn" onClick={() => act(() => api.post(`/subscriptions/admin/owners/${ownerId}/resend-invite`), "New login issued").then((r) => { if (r) { onCreds(r); done(); } })}>New temporary login</Button>
+            {sub?.has_provider_subscription && <Button variant="outline" data-testid="manage-sync-btn" onClick={() => act(() => api.post(`/subscriptions/admin/owners/${ownerId}/sync`), "Synced with Razorpay").then(done)}>Sync with Razorpay</Button>}
             {sub && sub.status !== "cancelled" && <Button variant="outline" data-testid="manage-cancel-btn" onClick={() => window.confirm("Cancel auto-pay? Access continues until the paid period ends.") && act(() => api.post(`/subscriptions/admin/owners/${ownerId}/cancel`), "Subscription cancelled").then(done)}>Cancel auto-pay</Button>}
           </div>
-          <form className="grid sm:grid-cols-4 gap-3 items-end border-t border-border pt-4" onSubmit={(e) => { e.preventDefault(); act(() => api.post("/subscriptions/admin/assign", { owner_id: ownerId, ...p }), sub ? "Plan updated" : "Plan assigned").then(done); }}>
+          <form className="grid sm:grid-cols-4 gap-3 items-end border-t border-border pt-4" onSubmit={(e) => {
+            e.preventDefault();
+            if (d.access.state === "legacy" && !window.confirm("This owner currently has free legacy access. After assigning a plan, their dashboard and public venue listing pause until they authorize the plan (or you record a manual renewal). Continue?")) return;
+            act(() => api.post("/subscriptions/admin/assign", { owner_id: ownerId, ...p }), sub ? "Plan updated" : "Plan assigned").then(done);
+          }}>
             <PlanFields f={p} setF={setPlan} prefix="manage" />
             <Button data-testid="manage-assign-btn">{sub ? "Change plan / dates" : "Assign plan"}</Button>
           </form>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -64,9 +64,12 @@ export function Signup() {
   const [step, setStep] = useState("email");
   const [token, setToken] = useState("");
   const [cooldown, setCooldown] = useState(0);
+  const timer = useRef(null);
+  useEffect(() => () => { clearInterval(timer.current); }, []);
   const tick = () => {
     setCooldown(60);
-    const t = setInterval(() => setCooldown((c) => { if (c <= 1) { clearInterval(t); return 0; } return c - 1; }), 1000);
+    clearInterval(timer.current);
+    timer.current = setInterval(() => setCooldown((c) => { if (c <= 1) { clearInterval(timer.current); return 0; } return c - 1; }), 1000);
   };
   const run = async (fn) => { setBusy(true); try { await fn(); } catch (err) { toast.error(errMsg(err)); } finally { setBusy(false); } };
   const sendOtp = (e) => { e?.preventDefault(); run(async () => { await api.post("/auth/registration-otp", { email: f.email }); setStep("otp"); tick(); toast.success("Code sent to your email"); }); };
