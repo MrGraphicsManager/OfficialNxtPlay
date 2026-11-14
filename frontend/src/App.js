@@ -4,7 +4,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider, RequireRole } from "@/lib/auth";
 import PublicLayout from "@/components/PublicLayout";
 import Home from "@/pages/Home";
-import Landing from "@/pages/Landing";
+import Landing from "@/pages/LandingSimple";
 import Venues from "@/pages/Venues";
 import VenueDetail from "@/pages/VenueDetail";
 import { Login, Signup, ForgotPassword, ResetPassword } from "@/pages/Auth";
