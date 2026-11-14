@@ -116,17 +116,71 @@ async def abandon_payment(booking_id: str, user=Depends(get_current_user)):
     return {"ok": True}
 
 
+WEBHOOK_PROCESSING_LEASE_SECONDS = 300
+
+
+async def claim_webhook_event(event_id: str) -> str:
+    now = now_utc()
+    try:
+        await db.webhook_events.insert_one({
+            "event_id": event_id,
+            "status": "processing",
+            "attempts": 1,
+            "received_at": iso(now),
+            "processing_started_at": iso(now),
+        })
+        return "claimed"
+    except DuplicateKeyError:
+        event = await db.webhook_events.find_one({"event_id": event_id}, NO_ID)
+        if event and event.get("status") == "processed":
+            return "processed"
+
+    stale_before = iso(now - timedelta(seconds=WEBHOOK_PROCESSING_LEASE_SECONDS))
+    result = await db.webhook_events.update_one(
+        {
+            "event_id": event_id,
+            "$or": [
+                {"status": "failed"},
+                {"status": "processing", "processing_started_at": {"$lt": stale_before}},
+            ],
+        },
+        {
+            "$set": {
+                "status": "processing",
+                "processing_started_at": iso(now),
+                "last_error": None,
+            },
+            "$inc": {"attempts": 1},
+        },
+    )
+    return "claimed" if result.modified_count else "processing"
+
+
+async def mark_webhook_event(event_id: str, status: str, error: str | None = None):
+    update = {"status": status, "updated_at": iso()}
+    if status == "processed":
+        update["processed_at"] = iso()
+    if error:
+        update["last_error"] = error[:500]
+    await db.webhook_events.update_one({"event_id": event_id}, {"$set": update})
+
+
 @router.post("/payments/webhook")
 async def razorpay_webhook(request: Request):
     body = await request.body()
     if not verify_webhook_signature(body, request.headers.get("x-razorpay-signature", "")):
         raise HTTPException(400, "Invalid webhook signature")
-    event_id = request.headers.get("x-razorpay-event-id") or new_id()
     try:
-        await db.webhook_events.insert_one({"event_id": event_id, "received_at": iso()})
-    except DuplicateKeyError:
+        data = json.loads(body)
+    except json.JSONDecodeError:
+        raise HTTPException(400, "Invalid webhook payload")
+    event_id = request.headers.get("x-razorpay-event-id") or new_id()
+    claim = await claim_webhook_event(event_id)
+    if claim == "processed":
         return {"status": "duplicate"}
-    data = json.loads(body)
+    if claim == "processing":
+        raise HTTPException(503, "Webhook event is already being processed")
+
     event = data.get("event", "")
     payload = data.get("payload", {})
     try:
@@ -136,9 +190,10 @@ async def razorpay_webhook(request: Request):
                 await confirm_paid_order(p["order_id"], p["id"])
         elif event == "payment.failed":
             p = payload.get("payment", {}).get("entity", {})
-            pay = await db.payments.find_one({"razorpay_order_id": p.get("order_id"), "status": "created"}, NO_ID)
-            if pay:
-                await db.payments.update_one({"id": pay["id"]}, {"$set": {"status": "failed", "error": p.get("error_description")}})
+            pay = await db.payments.find_one({"razorpay_order_id": p.get("order_id")}, NO_ID)
+            if pay and pay.get("status") != "captured":
+                await db.payments.update_one({"id": pay["id"], "status": {"$ne": "captured"}},
+                                             {"$set": {"status": "failed", "error": p.get("error_description")}})
                 res = await db.bookings.update_one({"id": pay["booking_id"], "status": "pending_payment"},
                                                    {"$set": {"status": "payment_failed"}})
                 if res.modified_count:
@@ -149,8 +204,17 @@ async def razorpay_webhook(request: Request):
             ref = await db.refunds.find_one_and_update({"razorpay_refund_id": r.get("id")}, {"$set": {"status": status, "updated_at": iso()}})
             if ref:
                 await db.bookings.update_one({"id": ref["booking_id"]}, {"$set": {"refund_status": status}})
+        await mark_webhook_event(event_id, "processed")
     except HTTPException as e:
         log.warning("Webhook %s processing issue: %s", event, e.detail)
+        await mark_webhook_event(event_id, "failed", e.detail)
+        if e.status_code in (404, 409) or e.status_code >= 500:
+            raise HTTPException(503, "Webhook processing should be retried")
+        raise
+    except Exception as e:
+        log.exception("Webhook %s processing failed", event)
+        await mark_webhook_event(event_id, "failed", str(e))
+        raise HTTPException(500, "Webhook processing failed")
     return {"status": "ok"}
 
 
