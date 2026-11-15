@@ -86,6 +86,10 @@ def _assert_safe_email(subject: str, html: str) -> None:
                 raise ValueError(f"Anchor text {m.group(1)!r} does not match link host {real!r} (G3)")
 
 
+def is_email_configured() -> bool:
+    return bool(os.environ.get("EMERGENT_EMAIL_KEY") or os.environ.get("RESEND_API_KEY"))
+
+
 async def send_email(*, to: str, subject: str, html: str) -> str | None:
     _assert_safe_email(subject, html)
     from_name = os.environ.get("EMAIL_FROM_NAME", "NXTPLAY")
@@ -133,8 +137,8 @@ async def send_email(*, to: str, subject: str, html: str) -> str | None:
             logger.error("Resend send error: %s", str(e)[:200])
             raise HTTPException(500, "Failed to send email via Resend")
 
-    logger.warning("No email provider configured (EMERGENT_EMAIL_KEY or RESEND_API_KEY not set). Email not sent for %s", to)
-    raise HTTPException(503, "Email verification is temporarily unavailable. Please contact support.")
+    logger.warning("No email provider configured (EMERGENT_EMAIL_KEY or RESEND_API_KEY not set). Email simulated for %s: %s", to, subject)
+    return None
 
 
 def _app_url(path: str = "") -> str:
