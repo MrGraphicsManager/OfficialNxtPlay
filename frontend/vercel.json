@@ -1,0 +1,3 @@
+{
+  "rewrites": [{ "source": "/((?!static/|nxtplay-logo\\.png).*)", "destination": "/index.html" }]
+}
