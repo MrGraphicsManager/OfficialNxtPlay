@@ -88,38 +88,62 @@ def _assert_safe_email(subject: str, html: str) -> None:
 
 async def send_email(*, to: str, subject: str, html: str) -> str | None:
     _assert_safe_email(subject, html)
-    payload = {"to": [to], "subject": subject, "html": html, "from_name": os.environ["EMAIL_FROM_NAME"]}
+    from_name = os.environ.get("EMAIL_FROM_NAME", "NXTPLAY")
+    payload = {"to": [to], "subject": subject, "html": html, "from_name": from_name}
     if os.environ.get("EMAIL_REPLY_TO"):
         payload["contact_email"] = os.environ["EMAIL_REPLY_TO"]
-    try:
-        async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.post(f"{EMAIL_BASE_URL}/api/v1/email/send",
-                                     headers={"X-Email-Key": os.environ["EMERGENT_EMAIL_KEY"]}, json=payload)
-        resp.raise_for_status()
-        return resp.json().get("id")
-    except httpx.HTTPStatusError as e:
+
+    # 1. Emergent managed email proxy
+    emergent_key = os.environ.get("EMERGENT_EMAIL_KEY")
+    if emergent_key:
         try:
-            code = e.response.json().get("code", "")
-        except ValueError:
-            code = ""
-        if code in ("insufficient_credits", "integration_disabled", "daily_limit_reached"):
-            logger.warning("Email paused: %s (%s)", code, e.response.status_code)
-            raise HTTPException(503, "Email is temporarily unavailable")
-        logger.error("Email send failed: %s", e.response.status_code)
-        raise HTTPException(502, "Failed to send email")
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error("Email send error: %s", str(e)[:200])
-        raise HTTPException(500, "Failed to send email")
+            async with httpx.AsyncClient(timeout=30) as client:
+                resp = await client.post(f"{EMAIL_BASE_URL}/api/v1/email/send",
+                                         headers={"X-Email-Key": emergent_key}, json=payload)
+            resp.raise_for_status()
+            return resp.json().get("id")
+        except httpx.HTTPStatusError as e:
+            try:
+                code = e.response.json().get("code", "")
+            except ValueError:
+                code = ""
+            if code in ("insufficient_credits", "integration_disabled", "daily_limit_reached"):
+                logger.warning("Email paused: %s (%s)", code, e.response.status_code)
+                raise HTTPException(503, "Email is temporarily unavailable")
+            logger.error("Email send failed: %s", e.response.status_code)
+            raise HTTPException(502, "Failed to send email")
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error("Email send error: %s", str(e)[:200])
+            raise HTTPException(500, "Failed to send email")
+
+    # 2. Direct Resend API
+    resend_key = os.environ.get("RESEND_API_KEY")
+    if resend_key:
+        from_email = os.environ.get("EMAIL_FROM", f"{from_name} <onboarding@resend.dev>")
+        try:
+            async with httpx.AsyncClient(timeout=30) as client:
+                resp = await client.post("https://api.resend.com/emails",
+                                         headers={"Authorization": f"Bearer {resend_key}", "Content-Type": "application/json"},
+                                         json={"from": from_email, "to": [to], "subject": subject, "html": html})
+            resp.raise_for_status()
+            return resp.json().get("id")
+        except Exception as e:
+            logger.error("Resend send error: %s", str(e)[:200])
+            raise HTTPException(500, "Failed to send email via Resend")
+
+    logger.warning("No email provider configured (EMERGENT_EMAIL_KEY or RESEND_API_KEY not set). Email not sent for %s", to)
+    raise HTTPException(503, "Email verification is temporarily unavailable. Please contact support.")
 
 
 def _app_url(path: str = "") -> str:
-    return os.environ["APP_PUBLIC_URL"].rstrip("/") + path
+    base = os.environ.get("APP_PUBLIC_URL", "https://nxtplay.live")
+    return base.rstrip("/") + path
 
 
 def _wrap(title: str, body_html: str) -> str:
-    brand = escape(os.environ["EMAIL_FROM_NAME"])
+    brand = escape(os.environ.get("EMAIL_FROM_NAME", "NXTPLAY"))
     return (f'<table role="presentation" width="100%" style="background:#080808"><tr><td style="padding:28px;'
             f'font-family:Arial,sans-serif;color:#ffffff">'
             f'<p style="font-size:22px;font-weight:bold;color:#C8FF00;margin:0 0 16px">{brand}</p>'

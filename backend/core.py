@@ -161,7 +161,8 @@ REMINDER_DAYS = 7
 def _fernet():
     key = os.environ.get("DATA_ENCRYPTION_KEY")
     if not key:
-        raise HTTPException(500, "Data encryption is not configured")
+        import base64
+        key = base64.urlsafe_b64encode(hashlib.sha256((JWT_SECRET or "nxtplay-encryption-secret").encode()).digest()).decode()
     return Fernet(key.encode())
 
 
