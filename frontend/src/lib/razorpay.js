@@ -1,6 +1,6 @@
 import { api, errMsg } from "@/lib/api";
 
-const loadScript = () =>
+export const loadScript = () =>
   new Promise((resolve) => {
     if (window.Razorpay) return resolve(true);
     const s = document.createElement("script");

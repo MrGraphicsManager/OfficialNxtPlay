@@ -56,18 +56,30 @@ export default function OwnerScan() {
   const start = async () => {
     setCamErr("");
     setResult(null);
+    // Reveal the reader before html5-qrcode measures its dimensions.
+    setRunning(true);
     try {
       scanner.current = scanner.current || new Html5Qrcode("html5-qr-reader");
-      await scanner.current.start({ facingMode: "environment" }, { fps: 10, qrbox: 240 }, async (text) => {
-        if (busy.current) return;
-        busy.current = true;
-        await stop();
-        await verify({ token: text });
-        busy.current = false;
-      });
-      setRunning(true);
+      await scanner.current.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: 240, aspectRatio: 4 / 3 },
+        async (text) => {
+          if (busy.current) return;
+          busy.current = true;
+          try {
+            await stop();
+            await verify({ token: text });
+          } finally {
+            busy.current = false;
+          }
+        }
+      );
     } catch (e) {
-      setCamErr("Camera unavailable or permission denied. Use the booking code below.");
+      try {
+        if (scanner.current?.isScanning) await scanner.current.stop();
+      } catch {}
+      setRunning(false);
+      setCamErr("Camera could not start. Use the booking code below.");
     }
   };
   useEffect(() => () => { stop(); }, []);
@@ -76,14 +88,18 @@ export default function OwnerScan() {
     <div className="max-w-xl">
       <PageTitle title="Scan booking QR" sub="Each QR works for a single check-in." />
       <div className="surface p-4 mb-5">
-        <div id="html5-qr-reader" className={`w-full ${running ? "" : "hidden"}`} data-testid="qr-reader" />
-        {!running && (
-          <div className="grid place-items-center py-10 text-center">
-            <Camera className="w-12 h-12 text-secondary mb-4" />
-            <Button className="font-bold h-11" onClick={start} data-testid="scan-start-btn">Open camera scanner</Button>
-            {camErr && <p className="text-amber-300 text-sm mt-3" data-testid="scan-camera-error">{camErr}</p>}
-          </div>
-        )}
+        <div className="relative w-full min-h-[260px]">
+          <div id="html5-qr-reader" className="w-full" data-testid="qr-reader" />
+          {!running && (
+            <div className="absolute inset-0 grid place-items-center bg-card text-center">
+              <div>
+                <Camera className="w-12 h-12 text-secondary mb-4 mx-auto" />
+                <Button className="font-bold h-11" onClick={start} data-testid="scan-start-btn">Open camera scanner</Button>
+                {camErr && <p className="text-amber-300 text-sm mt-3" data-testid="scan-camera-error">{camErr}</p>}
+              </div>
+            </div>
+          )}
+        </div>
         {running && <Button variant="outline" className="w-full mt-3" onClick={stop} data-testid="scan-stop-btn">Stop camera</Button>}
       </div>
       <form className="surface p-4 flex gap-2 mb-5" onSubmit={(e) => { e.preventDefault(); if (code.trim()) verify({ code: code.trim() }); }}>

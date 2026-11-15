@@ -2,8 +2,8 @@ import re
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from pydantic import BaseModel, EmailStr, Field
 
-from core import (db, NO_ID, USER_PROJ, iso, new_id, hash_pw, require_roles, court_price_for, today_ist, get_settings,
-                  call_refund_api, rzp, DATE_RE, TIME_RE)
+from core import (db, NO_ID, USER_PROJ, iso, new_id, hash_pw, require_roles, court_price_for, today_ist, get_settings, audit,
+                  call_refund_api, rzp, DATE_RE, TIME_RE, enforce_court_limit)
 from booking_routes import do_cancel
 from starlette.concurrency import run_in_threadpool
 from core import REFUND_STATUS
@@ -113,7 +113,7 @@ async def create_owner_account(o: OwnerIn):
     if await db.users.find_one({"email": email}):
         raise HTTPException(400, "An account with this email already exists")
     user = {"id": new_id(), "name": o.name.strip(), "email": email, "mobile": o.mobile.strip(), "role": "owner",
-            "active": True, "password_hash": hash_pw(o.password), "created_at": iso()}
+            "active": True, "must_change_password": True, "requires_plan": True, "password_hash": hash_pw(o.password), "created_at": iso()}
     await db.users.insert_one(user)
     return user["id"]
 
@@ -192,6 +192,7 @@ async def list_owners(user=Depends(admin_dep)):
 async def create_owner(body: OwnerIn, user=Depends(admin_dep)):
     oid = await create_owner_account(body)
     owner = await db.users.find_one({"id": oid}, USER_PROJ)
+    await audit(user["id"], "owner.created", "owner", oid)
     return owner
 
 
@@ -200,10 +201,12 @@ async def update_owner(owner_id: str, body: OwnerPatch, user=Depends(admin_dep))
     upd = {k: v for k, v in body.model_dump().items() if v is not None and k != "password"}
     if body.password:
         upd["password_hash"] = hash_pw(body.password)
+        upd["must_change_password"] = True
     res = await db.users.update_one({"id": owner_id, "role": "owner"}, {"$set": upd})
     if not res.matched_count:
         raise HTTPException(404, "Owner not found")
     owner = await db.users.find_one({"id": owner_id}, USER_PROJ)
+    await audit(user["id"], "owner.updated", "owner", owner_id, {"fields": sorted(upd)})
     return owner
 
 
@@ -236,6 +239,9 @@ async def create_venue(body: VenueCreate, user=Depends(admin_dep)):
         owner_id = await create_owner_account(body.owner)
     else:
         raise HTTPException(400, "Owner details are required")
+    sub = await db.subscriptions.find_one({"owner_id": owner_id}, NO_ID)
+    if sub and len(body.courts) > sub["court_limit"]:
+        raise HTTPException(400, f"This owner's plan allows up to {sub['court_limit']} courts per venue")
     venue = {"id": new_id(), "name": body.name.strip(), "city_id": body.city_id, "address": body.address.strip(),
              "open_time": body.open_time, "close_time": body.close_time, "rules": body.rules, "image_ids": body.image_ids,
              "status": body.status if body.status in ("active", "inactive") else "active", "owner_ids": [owner_id],
@@ -246,6 +252,7 @@ async def create_venue(body: VenueCreate, user=Depends(admin_dep)):
                                     "slot_minutes": c.slot_minutes, "active": True, "created_at": iso(),
                                     "prices": [{"price": c.price, "effective_from": "2000-01-01", "approved_at": iso()}]})
     venue.pop("_id", None)
+    await audit(user["id"], "venue.created", "venue", venue["id"], {"owner_id": owner_id, "courts": len(body.courts)})
     return venue
 
 
@@ -273,15 +280,18 @@ async def update_venue(venue_id: str, body: VenuePatch, user=Depends(admin_dep))
         if n != len(set(upd["owner_ids"])):
             raise HTTPException(400, "Invalid owner list")
     await db.venues.update_one({"id": venue_id}, {"$set": upd})
+    await audit(user["id"], "venue.updated", "venue", venue_id, {"fields": sorted(upd)})
     return await get_venue(venue_id, user)
 
 
 @router.post("/venues/{venue_id}/courts")
 async def add_court(venue_id: str, body: CourtIn, user=Depends(admin_dep)):
-    if not await db.venues.find_one({"id": venue_id}):
+    v = await db.venues.find_one({"id": venue_id}, NO_ID)
+    if not v:
         raise HTTPException(404, "Venue not found")
     if body.slot_minutes not in (30, 60) or not await db.sports.find_one({"id": body.sport_id}):
         raise HTTPException(400, "Invalid court configuration")
+    await enforce_court_limit(v)
     await db.courts.insert_one({"id": new_id(), "venue_id": venue_id, "sport_id": body.sport_id, "name": body.name.strip(),
                                 "slot_minutes": body.slot_minutes, "active": True, "created_at": iso(),
                                 "prices": [{"price": body.price, "effective_from": "2000-01-01", "approved_at": iso()}]})
@@ -457,7 +467,7 @@ async def finance(user=Depends(admin_dep)):
                "date": b["date"], "status": b["status"], "gross_amount": b["gross_amount"], "discount": b.get("discount", 0),
                "paid": b["final_amount"], "refund": refunded, "refund_status": r["status"] if r else None, "platform_fee": fee,
                "net_venue_payable": payable, "settlement_status": b.get("settlement_status", "unsettled"),
-               "settlement_date": b.get("settlement_date")}
+               "settlement_date": b.get("settlement_date"), "route": bool(b.get("route"))}
         ledger.append(row)
         pv = per_venue.setdefault(b["venue_id"], {"venue_id": b["venue_id"], "venue_name": row["venue_name"], "collected": 0,
                                                   "refunded": 0, "platform_fee": 0, "payable": 0, "settled": 0, "outstanding": 0, "cash_total": 0})
@@ -483,7 +493,7 @@ async def finance(user=Depends(admin_dep)):
 @router.post("/settlements")
 async def record_settlement(body: SettleIn, user=Depends(admin_dep)):
     fin = await finance(user)
-    rows = [r for r in fin["ledger"] if r["venue_id"] == body.venue_id and r["settlement_status"] == "unsettled"
+    rows = [r for r in fin["ledger"] if r["venue_id"] == body.venue_id and r["settlement_status"] == "unsettled" and not r["route"]
             and r["net_venue_payable"] > 0 and r["refund_status"] in (None, "processed")]
     if not rows:
         raise HTTPException(400, "Nothing outstanding for this venue")

@@ -9,13 +9,13 @@ from fastapi import FastAPI  # noqa: E402
 from starlette.middleware.cors import CORSMiddleware  # noqa: E402
 
 from core import db, client, iso, new_id, hash_pw, verify_pw  # noqa: E402
-import auth_routes, public_routes, booking_routes, owner_routes, admin_routes  # noqa: E402
+import auth_routes, public_routes, booking_routes, owner_routes, admin_routes, subscriptions, route_payouts  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 log = logging.getLogger("nxtplay")
 
 app = FastAPI(title="NXTPLAY API")
-for r in (auth_routes, public_routes, booking_routes, owner_routes, admin_routes):
+for r in (auth_routes, public_routes, booking_routes, owner_routes, admin_routes, subscriptions, route_payouts):
     app.include_router(r.router)
 
 app.add_middleware(
@@ -48,6 +48,22 @@ async def ensure_indexes():
     await db.coupon_redemptions.create_index("booking_id", unique=True)
     await db.qr_checkins.create_index("booking_id", unique=True)
     await db.webhook_events.create_index("event_id", unique=True)
+    await db.subscription_events.create_index("event_id", unique=True)
+    await db.subscriptions.create_index("owner_id", unique=True)
+    await db.subscriptions.create_index("id", unique=True)
+    await db.subscriptions.create_index("rzp_sub_hash")
+    await db.linked_accounts.create_index("venue_id", unique=True)
+    await db.linked_accounts.create_index("account_hash", unique=True, partialFilterExpression={"account_hash": {"$type": "string"}})
+    await db.route_webhook_events.create_index("event_id", unique=True)
+    await db.payments.create_index("razorpay_payment_id")
+    await db.subscriptions.create_index("previous_rzp_hashes")
+    await db.subscription_payments.create_index("ref_hash", unique=True)
+    await db.subscription_payments.create_index([("owner_id", 1), ("created_at", -1)])
+    await db.subscription_history.create_index([("owner_id", 1), ("created_at", -1)])
+    await db.email_otps.create_index([("email", 1), ("purpose", 1)])
+    await db.email_otps.create_index("expires_at", expireAfterSeconds=0)
+    await db.audit_logs.create_index([("target_id", 1), ("created_at", -1)])
+    await db.venue_closures.create_index([("venue_id", 1), ("date", 1)])
     await db.price_requests.create_index([("court_id", 1), ("status", 1)])
 
 
@@ -64,7 +80,7 @@ async def upsert_user(email, password, name, role):
 
 async def seed():
     if not await db.settings.find_one({"id": "global"}):
-        await db.settings.insert_one({"id": "global", "commission_pct": 10, "show_demo": True})
+        await db.settings.insert_one({"id": "global", "commission_pct": 0, "show_demo": True})
     if not await db.cities.find_one({"name": "Navsari"}):
         await db.cities.insert_one({"id": new_id(), "name": "Navsari", "state": "Gujarat", "active": True, "created_at": iso()})
     for s in ("Box Cricket", "Pickleball"):

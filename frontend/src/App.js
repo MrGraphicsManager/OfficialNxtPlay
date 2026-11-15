@@ -4,7 +4,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider, RequireRole } from "@/lib/auth";
 import PublicLayout from "@/components/PublicLayout";
 import Home from "@/pages/Home";
-import Landing from "@/pages/Landing";
+import Landing from "@/pages/LandingSimple";
 import Venues from "@/pages/Venues";
 import VenueDetail from "@/pages/VenueDetail";
 import { Login, Signup, ForgotPassword, ResetPassword } from "@/pages/Auth";
@@ -17,6 +17,11 @@ import { OwnerHome, OwnerBookings } from "@/pages/owner/OwnerPages";
 import OwnerWalkin from "@/pages/owner/OwnerWalkin";
 import OwnerPricing from "@/pages/owner/OwnerPricing";
 import OwnerScan from "@/pages/owner/OwnerScan";
+import OwnerPlan from "@/pages/owner/OwnerPlan";
+import OwnerPayouts from "@/pages/owner/OwnerPayouts";
+import AdminPayouts from "@/pages/admin/AdminPayouts";
+import OwnerSettings from "@/pages/owner/OwnerSettings";
+import AdminSubscriptions from "@/pages/admin/AdminSubscriptions";
 import AdminLayout, { AdminHome } from "@/pages/admin/AdminLayout";
 import { AdminVenues, AdminVenueManage } from "@/pages/admin/AdminVenues";
 import AdminVenueWizard from "@/pages/admin/AdminVenueWizard";
@@ -51,6 +56,9 @@ export default function App() {
             <Route path="walk-in" element={<OwnerWalkin />} />
             <Route path="pricing" element={<OwnerPricing />} />
             <Route path="scan" element={<OwnerScan />} />
+            <Route path="subscription" element={<OwnerPlan />} />
+            <Route path="settings" element={<OwnerSettings />} />
+            <Route path="payouts" element={<OwnerPayouts />} />
           </Route>
           <Route path="/admin" element={<RequireRole role="admin"><AdminLayout /></RequireRole>}>
             <Route index element={<AdminHome />} />
@@ -58,6 +66,8 @@ export default function App() {
             <Route path="venues/new" element={<AdminVenueWizard />} />
             <Route path="venues/:id" element={<AdminVenueManage />} />
             <Route path="owners" element={<AdminOwners />} />
+            <Route path="subscriptions" element={<AdminSubscriptions />} />
+            <Route path="payouts" element={<AdminPayouts />} />
             <Route path="bookings" element={<AdminBookings />} />
             <Route path="pricing" element={<AdminPricing />} />
             <Route path="coupons" element={<AdminCoupons />} />

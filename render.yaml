@@ -14,7 +14,7 @@ services:
       - key: JWT_SECRET
         sync: false
       - key: CORS_ORIGINS
-        value: https://official-nxt-play.vercel.app
+        value: https://official-nxt-play.vercel.app,https://nxtplay.live,https://www.nxtplay.live
       - key: ADMIN_EMAIL
         sync: false
       - key: ADMIN_PASSWORD

@@ -12,6 +12,7 @@ from zoneinfo import ZoneInfo
 import bcrypt
 import jwt
 import razorpay
+from cryptography.fernet import Fernet
 from fastapi import Depends, HTTPException, Request
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo.errors import BulkWriteError, DuplicateKeyError
@@ -133,6 +134,107 @@ def rzp():
     return razorpay.Client(auth=(kid, ks))
 
 
+SUBSCRIPTION_PLANS = {
+    "starter": {"amount": 399, "court_limit": 5, "env": "RAZORPAY_PLAN_399"},
+    "growth": {"amount": 699, "court_limit": 10, "env": "RAZORPAY_PLAN_699"},
+}
+
+
+def subscription_plan(key: str):
+    plan = SUBSCRIPTION_PLANS.get(key)
+    if not plan:
+        raise HTTPException(400, "Invalid subscription plan")
+    return {"key": key, **plan}
+
+
+async def audit(actor_id: str, action: str, target_type: str, target_id: str, details: dict | None = None):
+    await db.audit_logs.insert_one({"id": new_id(), "actor_id": actor_id, "action": action,
+                                    "target_type": target_type, "target_id": target_id,
+                                    "details": details or {}, "created_at": iso()})
+
+
+# ---------- Encryption & subscription access ----------
+GRACE_DAYS = 7
+REMINDER_DAYS = 7
+
+
+def _fernet():
+    key = os.environ.get("DATA_ENCRYPTION_KEY")
+    if not key:
+        import base64
+        key = base64.urlsafe_b64encode(hashlib.sha256((JWT_SECRET or "nxtplay-encryption-secret").encode()).digest()).decode()
+    return Fernet(key.encode())
+
+
+def enc(value):
+    return None if value is None else _fernet().encrypt(str(value).encode()).decode()
+
+
+def dec(value):
+    if not value:
+        return None
+    try:
+        return _fernet().decrypt(value.encode()).decode()
+    except Exception:
+        return None
+
+
+def lookup_hash(value: str) -> str:
+    return hmac.new(JWT_SECRET.encode(), f"lookup:{value}".encode(), hashlib.sha256).hexdigest()
+
+
+def sub_state(sub, requires_plan: bool = False):
+    base = {"paid_until": None, "days_left": None, "expiring_soon": False, "payment_issue": False, "grace_until": None}
+    if not sub:
+        if requires_plan:
+            return {**base, "state": "awaiting_plan", "operational": False}
+        return {**base, "state": "legacy", "operational": True}
+    now = now_utc()
+    paid = datetime.fromisoformat(sub["paid_until"]) if sub.get("paid_until") else None
+    status = sub.get("status")
+    issue = status in ("past_due", "halted")
+    if not paid:
+        return {**base, "state": "awaiting_authorization", "operational": False, "payment_issue": issue}
+    info = {**base, "paid_until": sub["paid_until"], "days_left": max(0, (paid - now).days), "payment_issue": issue}
+    if now <= paid:
+        return {**info, "state": "cancelling" if status == "cancelled" else "active", "operational": True,
+                "expiring_soon": (paid - now) <= timedelta(days=REMINDER_DAYS)}
+    grace = paid + timedelta(days=GRACE_DAYS)
+    if status in ("active", "past_due") and now <= grace:
+        return {**info, "state": "grace", "operational": True, "expiring_soon": True, "payment_issue": True, "grace_until": iso(grace)}
+    return {**info, "state": "expired", "operational": False}
+
+
+async def venue_subs(venue):
+    return await db.subscriptions.find({"owner_id": {"$in": venue.get("owner_ids", [])}}, NO_ID).to_list(20)
+
+
+async def venue_operational(venue) -> bool:
+    subs = await venue_subs(venue)
+    if not subs:
+        return not await db.users.find_one({"id": {"$in": venue.get("owner_ids", [])}, "requires_plan": True}, {"_id": 0, "id": 1})
+    return any(sub_state(s)["operational"] for s in subs)
+
+
+async def court_limit_for_venue(venue):
+    subs = await venue_subs(venue)
+    return max(s["court_limit"] for s in subs) if subs else None
+
+
+async def enforce_court_limit(venue, adding: int = 1):
+    limit = await court_limit_for_venue(venue)
+    if limit is None:
+        return
+    count = await db.courts.count_documents({"venue_id": venue["id"]})
+    if count + adding > limit:
+        raise HTTPException(400, f"Plan limit reached: up to {limit} courts per venue. Contact NXTPLAY Super Admin to upgrade your plan.")
+
+
+def day_open(venue, date: str) -> bool:
+    days = venue.get("operating_days")
+    return not days or datetime.strptime(date, "%Y-%m-%d").weekday() in days
+
+
 def verify_checkout_signature(order_id, payment_id, signature) -> bool:
     secret = os.environ.get("RAZORPAY_KEY_SECRET", "")
     if not secret or not signature:
@@ -182,10 +284,15 @@ async def court_slots(venue, court, date: str):
     taken = await taken_starts(court["id"], date)
     price = court_price_for(court, date)
     now = now_ist()
+    closed = await db.venue_closures.find_one({"venue_id": venue["id"], "date": date,
+                                                "$or": [{"court_id": None}, {"court_id": court["id"]}]}, NO_ID)
+    closed = closed or not day_open(venue, date)
     out = []
     for s in range(o, c - dur + 1, dur):
         status = "available"
-        if s in taken:
+        if closed:
+            status = "unavailable"
+        elif s in taken:
             status = "booked"
         elif slot_dt(date, s) <= now:
             status = "past"
@@ -213,6 +320,13 @@ async def prepare_booking(court_id: str, date: str, start_min: int, end_min: int
         raise HTTPException(400, "Venue is not accepting bookings")
     if not DATE_RE.match(date or ""):
         raise HTTPException(400, "Invalid date")
+    if await db.venue_closures.find_one({"venue_id": venue["id"], "date": date,
+                                          "$or": [{"court_id": None}, {"court_id": court_id}]}, NO_ID):
+        raise HTTPException(400, "This venue or court is unavailable on the selected date")
+    if not day_open(venue, date):
+        raise HTTPException(400, "The venue is closed on this day")
+    if require_active and not await venue_operational(venue):
+        raise HTTPException(400, "Venue is not accepting bookings")
     d = datetime.strptime(date, "%Y-%m-%d").date()
     if d > (now_ist().date() + timedelta(days=MAX_ADVANCE_DAYS)):
         raise HTTPException(400, f"Bookings open up to {MAX_ADVANCE_DAYS} days in advance")
@@ -266,11 +380,10 @@ async def evaluate_coupon(code: str, gross: int):
 
 # ---------- Payment confirmation & refunds ----------
 async def finalize_booking_confirmation(booking, extra: dict):
-    s = await get_settings()
     final = booking["final_amount"]
     online = booking["payment_method"] in ("razorpay",)
-    pct = s.get("commission_pct", 0) if online else 0
-    fee = round(final * pct / 100) if online else 0
+    pct = 0  # NXTPLAY earns from owner subscriptions only; no booking commission
+    fee = 0
     update = {"status": "confirmed", "qr_token": secrets.token_urlsafe(24), "confirmed_at": iso(), "updated_at": iso(),
               "commission_pct": pct, "platform_fee": fee, "venue_payable": final - fee if online else 0,
               "settlement_status": "unsettled" if online else "not_applicable", **extra}
@@ -346,9 +459,11 @@ async def call_refund_api(refund):
     if not client_:
         update.update(status="failed", error="Payments are not configured")
     else:
+        opts = {"amount": int(refund["amount"]) * 100, "notes": {"booking": refund["booking_code"]}}
+        if await db.payments.find_one({"razorpay_payment_id": refund["razorpay_payment_id"], "route": {"$exists": True}}, {"_id": 0, "id": 1}):
+            opts["reverse_all"] = 1
         try:
-            r = await run_in_threadpool(client_.payment.refund, refund["razorpay_payment_id"],
-                                        {"amount": int(refund["amount"]) * 100, "notes": {"booking": refund["booking_code"]}})
+            r = await run_in_threadpool(client_.payment.refund, refund["razorpay_payment_id"], opts)
             update.update(razorpay_refund_id=r.get("id"), status=REFUND_STATUS.get(r.get("status"), "initiated"), error=None)
         except Exception as e:  # provider error must be visible to admins
             update.update(status="failed", error=str(e)[:300])

@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Response
-from core import db, NO_ID, get_settings, court_price_for, court_slots, today_ist, rzp_key_id, rzp, DATE_RE
+from core import db, NO_ID, get_settings, court_price_for, court_slots, today_ist, rzp_key_id, rzp, DATE_RE, venue_operational
 
 router = APIRouter(prefix="/api")
 
@@ -48,6 +48,8 @@ async def list_venues(city_id: str | None = None, sport_id: str | None = None):
     venues = await db.venues.find(q, NO_ID).sort("created_at", -1).to_list(200)
     out = []
     for v in venues:
+        if not await venue_operational(v):
+            continue
         if sport_id and not await db.courts.find_one({"venue_id": v["id"], "sport_id": sport_id, "active": True}):
             continue
         out.append(await venue_card(v, sport_id))
@@ -56,7 +58,7 @@ async def list_venues(city_id: str | None = None, sport_id: str | None = None):
 
 async def get_public_venue(venue_id):
     v = await db.venues.find_one(await public_venue_query({"id": venue_id}), NO_ID)
-    if not v:
+    if not v or not await venue_operational(v):
         raise HTTPException(404, "Venue not found")
     return v
 
@@ -70,6 +72,7 @@ async def venue_detail(venue_id: str):
     today = today_ist()
     return {"id": v["id"], "name": v["name"], "address": v.get("address", ""), "city": city["name"] if city else "",
             "open_time": v["open_time"], "close_time": v["close_time"], "rules": v.get("rules", ""),
+            "description": v.get("description", ""), "operating_days": v.get("operating_days"),
             "image_ids": v.get("image_ids", []), "is_demo": v.get("is_demo", False),
             "courts": [{"id": c["id"], "name": c["name"], "sport_id": c["sport_id"], "sport_name": sports.get(c["sport_id"], ""),
                         "slot_minutes": c["slot_minutes"], "price": court_price_for(c, today)} for c in courts]}
