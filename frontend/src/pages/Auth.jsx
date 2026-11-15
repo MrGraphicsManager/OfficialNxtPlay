@@ -72,7 +72,20 @@ export function Signup() {
     timer.current = setInterval(() => setCooldown((c) => { if (c <= 1) { clearInterval(timer.current); return 0; } return c - 1; }), 1000);
   };
   const run = async (fn) => { setBusy(true); try { await fn(); } catch (err) { toast.error(errMsg(err)); } finally { setBusy(false); } };
-  const sendOtp = (e) => { e?.preventDefault(); run(async () => { await api.post("/auth/registration-otp", { email: f.email }); setStep("otp"); tick(); toast.success("Code sent to your email"); }); };
+  const sendOtp = (e) => {
+    e?.preventDefault();
+    run(async () => {
+      const { data } = await api.post("/auth/registration-otp", { email: f.email });
+      setStep("otp");
+      tick();
+      if (data?.simulated && data?.dev_otp) {
+        toast.info(`Demo Mode: Your verification code is ${data.dev_otp}`, { duration: 12000 });
+        setF((prev) => ({ ...prev, otp: data.dev_otp }));
+      } else {
+        toast.success("Code sent to your email");
+      }
+    });
+  };
   const verify = (e) => { e.preventDefault(); run(async () => { const { data } = await api.post("/auth/verify-registration-otp", { email: f.email, otp: f.otp }); setToken(data.registration_token); setStep("details"); toast.success("Email verified"); }); };
   const submit = (e) => {
     e.preventDefault();

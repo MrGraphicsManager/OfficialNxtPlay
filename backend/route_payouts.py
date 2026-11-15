@@ -3,7 +3,7 @@ import json
 import os
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from pymongo.errors import DuplicateKeyError
 from starlette.concurrency import run_in_threadpool
 
@@ -114,6 +114,23 @@ class KycIn(BaseModel):
     ifsc_code: str = Field(pattern=r"^[A-Z]{4}0[A-Z0-9]{6}$")
     beneficiary_name: str = Field(min_length=2, max_length=120)
     tnc_accepted: bool
+
+    @field_validator("business_pan", "gst", mode="before")
+    @classmethod
+    def clean_optional_pan_gst(cls, v):
+        if not v or not str(v).strip():
+            return None
+        return str(v).strip().upper()
+
+    @field_validator("stakeholder_pan", "ifsc_code", mode="before")
+    @classmethod
+    def clean_pan_ifsc(cls, v):
+        return str(v).strip().upper() if v else v
+
+    @field_validator("phone", "postal_code", "account_number", mode="before")
+    @classmethod
+    def clean_numeric_fields(cls, v):
+        return str(v).strip() if v else v
 
 
 async def owned_venue(user, venue_id):

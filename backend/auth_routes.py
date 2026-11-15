@@ -86,14 +86,21 @@ async def registration_otp(body: OtpRequestIn):
            "window_start": window_start, "sends": sends + 1}
     await db.email_otps.update_one({"email": email, "purpose": "registration"}, {"$set": doc}, upsert=True)
     log.info("Verification code generated for %s: %s", email, code)
+    is_live = emailer.is_email_configured()
     try:
         await emailer.send_otp(email, code)
     except HTTPException:
-        raise
+        if is_live:
+            raise
     except Exception as e:
         log.error("Failed to deliver verification code to %s: %s", email, e)
-        raise HTTPException(500, "Could not send verification email")
-    return {"ok": True, "expires_in_minutes": OTP_TTL_MINUTES}
+        if is_live:
+            raise HTTPException(500, "Could not send verification email")
+    resp = {"ok": True, "expires_in_minutes": OTP_TTL_MINUTES}
+    if not is_live:
+        resp["simulated"] = True
+        resp["dev_otp"] = code
+    return resp
 
 
 @router.post("/verify-registration-otp")
